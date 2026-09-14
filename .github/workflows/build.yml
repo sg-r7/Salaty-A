@@ -14,8 +14,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: npm
 
-      - name: Setup Java
+      - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -25,17 +26,21 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci || npm install
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+      - name: Expo Prebuild (Generate Android Project)
+        run: npx expo prebuild --platform android --no-install
 
-      - name: Build Local APK
-        run: npx eas build -p android --profile preview --local --output ./Salaty.apk
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Salaty-v1.0.6
-          path: ./Salaty.apk
-
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
