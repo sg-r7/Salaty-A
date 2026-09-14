@@ -5,94 +5,164 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import * as Location from "expo-location";
+import { Coordinates, CalculationMethod, PrayerTimes } from "adhan";
+import {
+  registerForPushNotificationsAsync,
+  schedulePrayerNotification,
+  cancelAllNotifications,
+} from "@/lib/notifications";
 
-interface PrayerTime {
+interface PrayerItem {
   name: string;
   time: string;
   isNext?: boolean;
 }
 
 export default function PrayerHomeScreen() {
-  const [currentTime, setCurrentTime] = useState("");
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [locationName, setLocationName] = useState("جاري تحديد الموقع...");
+  const [prayersList, setPrayersList] = useState<PrayerItem[]>([]);
+  const [nextPrayerInfo, setNextPrayerInfo] = useState<{ name: string; time: string }>({
+    name: "...",
+    time: "...",
+  });
 
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString("ar-IQ", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      );
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    (async () => {
+      await registerForPushNotificationsAsync();
 
-  const prayers: PrayerTime[] = [
-    { name: "الفجر", time: "04:35 ص" },
-    { name: "الشروق", time: "05:58 ص" },
-    { name: "الظهر", time: "12:08 م", isNext: true },
-    { name: "العصر", time: "03:38 م" },
-    { name: "المغرب", time: "06:17 م" },
-    { name: "العشاء", time: "07:45 م" },
-  ];
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      let latitude = 33.3152; // إحداثيات افتراضية
+      let longitude = 44.3661;
+
+      if (status === "granted") {
+        try {
+          const loc = await Location.getCurrentPositionAsync({});
+          latitude = loc.coords.latitude;
+          longitude = loc.coords.longitude;
+          setLocationName("الموقع الحالي (GPS)");
+        } catch {
+          setLocationName("الموقع الافتراضي");
+        }
+      } else {
+        setLocationName("الموقع الافتراضي");
+      }
+
+      // حساب المواقيت الفلكية الدقيقة
+      const coords = new Coordinates(latitude, longitude);
+      const params = CalculationMethod.MuslimWorldLeague();
+      const date = new Date();
+      const prayerTimes = new PrayerTimes(coords, date, params);
+
+      const formatTime = (d: Date) =>
+        d.toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" });
+
+      const list: PrayerItem[] = [
+        { name: "الفجر", time: formatTime(prayerTimes.fajr) },
+        { name: "الشروق", time: formatTime(prayerTimes.sunrise) },
+        { name: "الظهر", time: formatTime(prayerTimes.dhuhr) },
+        { name: "العصر", time: formatTime(prayerTimes.asr) },
+        { name: "المغرب", time: formatTime(prayerTimes.maghrib) },
+        { name: "العشاء", time: formatTime(prayerTimes.isha) },
+      ];
+
+      // تحديد الصلاة القادمة وجدولة التنبيهات
+      await cancelAllNotifications();
+      const next = prayerTimes.nextPrayer();
+      let nextName = "الفجر";
+      let nextTime = formatTime(prayerTimes.fajr);
+
+      const prayerMap: Record<string, { name: string; date: Date }> = {
+        fajr: { name: "الفجر", date: prayerTimes.fajr },
+        sunrise: { name: "الشروق", date: prayerTimes.sunrise },
+        dhuhr: { name: "الظهر", date: prayerTimes.dhuhr },
+        asr: { name: "العصر", date: prayerTimes.asr },
+        maghrib: { name: "المغرب", date: prayerTimes.maghrib },
+        isha: { name: "العشاء", date: prayerTimes.isha },
+      };
+
+      if (next && prayerMap[next]) {
+        nextName = prayerMap[next].name;
+        nextTime = formatTime(prayerMap[next].date);
+      }
+
+      // جدولة إشعارات الصلوات المتبقية اليوم
+      for (const key of Object.keys(prayerMap)) {
+        await schedulePrayerNotification(prayerMap[key].name, prayerMap[key].date);
+      }
+
+      const updatedList = list.map((item) => ({
+        ...item,
+        isNext: item.name === nextName,
+      }));
+
+      setPrayersList(updatedList);
+      setNextPrayerInfo({ name: nextName, time: nextTime });
+      setLoading(false);
+    })();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* الترويسة والوقت الحالي */}
         <View style={styles.header}>
           <Text style={styles.title}>صلاتي | SALATY</Text>
-          <Text style={styles.clockText}>{currentTime}</Text>
-          <Text style={styles.dateText}>مواقيت الصلاة اليومية</Text>
+          <Text style={styles.dateText}>{locationName}</Text>
         </View>
 
-        {/* بطاقة الصلاة القادمة */}
-        <View style={styles.nextPrayerCard}>
-          <Text style={styles.nextPrayerLabel}>الصلاة القادمة</Text>
-          <Text style={styles.nextPrayerName}>صلاة الظهر</Text>
-          <Text style={styles.nextPrayerTime}>12:08 م</Text>
-        </View>
-
-        {/* قائمة مواقيت الصلوات */}
-        <View style={styles.listCard}>
-          {prayers.map((prayer, index) => (
-            <View
-              key={index}
-              style={[
-                styles.prayerRow,
-                prayer.isNext && styles.activePrayerRow,
-                index === prayers.length - 1 && { borderBottomWidth: 0 },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.prayerName,
-                  prayer.isNext && styles.activeText,
-                ]}
-              >
-                {prayer.name}
-              </Text>
-              <Text
-                style={[
-                  styles.prayerTime,
-                  prayer.isNext && styles.activeText,
-                ]}
-              >
-                {prayer.time}
-              </Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#48cae4" style={{ marginVertical: 30 }} />
+        ) : (
+          <>
+            <View style={styles.nextPrayerCard}>
+              <Text style={styles.nextPrayerLabel}>الصلاة القادمة</Text>
+              <Text style={styles.nextPrayerName}>صلاة {nextPrayerInfo.name}</Text>
+              <Text style={styles.nextPrayerTime}>{nextPrayerInfo.time}</Text>
             </View>
-          ))}
-        </View>
 
-        {/* زر التنبيهات والأذكار */}
-        <TouchableOpacity style={styles.actionBtn}>
-          <Text style={styles.actionBtnText}>الأذكار والتسابيح 📿</Text>
-        </TouchableOpacity>
+            <View style={styles.listCard}>
+              {prayersList.map((prayer, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.prayerRow,
+                    prayer.isNext && styles.activePrayerRow,
+                    index === prayersList.length - 1 && { borderBottomWidth: 0 },
+                  ]}
+                >
+                  <Text style={[styles.prayerName, prayer.isNext && styles.activeText]}>
+                    {prayer.name}
+                  </Text>
+                  <Text style={[styles.prayerTime, prayer.isNext && styles.activeText]}>
+                    {prayer.time}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.navBtn}
+            onPress={() => router.push("/qibla")}
+          >
+            <Text style={styles.navBtnText}>🧭 اتجاه القبلة</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navBtn}
+            onPress={() => router.push("/tasbeeh")}
+          >
+            <Text style={styles.navBtnText}>📿 المسبحة والأذكار</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -101,10 +171,9 @@ export default function PrayerHomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0b132b" },
   content: { padding: 20 },
-  header: { alignItems: "center", marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#6fffe9" },
-  clockText: { fontSize: 36, fontWeight: "bold", color: "#ffffff", marginVertical: 6 },
-  dateText: { fontSize: 14, color: "#a0aec0" },
+  header: { alignItems: "center", marginBottom: 15 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#6fffe9" },
+  dateText: { fontSize: 13, color: "#a0aec0", marginTop: 4 },
   nextPrayerCard: {
     backgroundColor: "#1c2541",
     borderRadius: 16,
@@ -131,7 +200,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#2d3748",
   },
   activePrayerRow: {
-    backgroundColor: "rgba(72, 202, 228, 0.1)",
+    backgroundColor: "rgba(72, 202, 228, 0.12)",
     marginHorizontal: -10,
     paddingHorizontal: 10,
     borderRadius: 8,
@@ -139,12 +208,13 @@ const styles = StyleSheet.create({
   prayerName: { color: "#edf2f7", fontSize: 16, fontWeight: "600" },
   prayerTime: { color: "#cbd5e0", fontSize: 16 },
   activeText: { color: "#48cae4", fontWeight: "bold" },
-  actionBtn: {
+  buttonRow: { flexDirection: "row", gap: 12 },
+  navBtn: {
+    flex: 1,
     backgroundColor: "#1f4068",
-    padding: 15,
+    padding: 16,
     borderRadius: 12,
     alignItems: "center",
   },
-  actionBtnText: { color: "#ffffff", fontSize: 16, fontWeight: "bold" },
+  navBtnText: { color: "#ffffff", fontSize: 15, fontWeight: "bold" },
 });
-
