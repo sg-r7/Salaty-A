@@ -2,12 +2,12 @@
   "expo": {
     "name": "صلاتي | SALATY",
     "slug": "salaty-app",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "com.salaty.app",
-      "versionCode": 5,
+      "versionCode": 6,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -17,4 +17,3 @@
     }
   }
 }
-
