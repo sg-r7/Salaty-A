@@ -14,6 +14,11 @@
         "POST_NOTIFICATIONS",
         "VIBRATE"
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4bf2ced3-ea86-4b0f-b8bc-68cedba244c6"
+      }
     }
   }
 }
