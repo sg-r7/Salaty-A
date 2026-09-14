@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { Coordinates, CalculationMethod, PrayerTimes } from "adhan";
+import { Coordinates, CalculationMethod, PrayerTimes, Madhab } from "adhan";
 import {
   registerForPushNotificationsAsync,
   schedulePrayerNotification,
@@ -26,7 +26,7 @@ interface PrayerItem {
 export default function PrayerHomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [locationName, setLocationName] = useState("جاري تحديد الموقع...");
+  const [locationName, setLocationName] = useState("جاري تحديد الموقع بدقة...");
   const [prayersList, setPrayersList] = useState<PrayerItem[]>([]);
   const [nextPrayerInfo, setNextPrayerInfo] = useState<{ name: string; time: string }>({
     name: "...",
@@ -37,26 +37,48 @@ export default function PrayerHomeScreen() {
     (async () => {
       await registerForPushNotificationsAsync();
 
+      // الإحداثيات الاحتياطية الدقيقة لقضاء الكرمة / الفلوجة
+      let latitude = 33.3850;
+      let longitude = 43.9100;
+
       const { status } = await Location.requestForegroundPermissionsAsync();
-      let latitude = 33.3152; // إحداثيات افتراضية
-      let longitude = 44.3661;
 
       if (status === "granted") {
         try {
-          const loc = await Location.getCurrentPositionAsync({});
+          // جلب الموقع الفعلي عبر GPS بدقة عالية
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
           latitude = loc.coords.latitude;
           longitude = loc.coords.longitude;
-          setLocationName("الموقع الحالي (GPS)");
+
+          // استخراج اسم المدينة والمنطقة تلقائياً
+          const reverseGeocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+          if (reverseGeocode.length > 0) {
+            const place = reverseGeocode[0];
+            const city = place.district || place.city || place.subregion || "الأنبار";
+            setLocationName(`📍 ${city} (GPS)`);
+          } else {
+            setLocationName("📍 الموقع الحالي (GPS)");
+          }
         } catch {
-          setLocationName("الموقع الافتراضي");
+          setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
         }
       } else {
-        setLocationName("الموقع الافتراضي");
+        setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
       }
 
-      // حساب المواقيت الفلكية الدقيقة
+      // حساب المواقيت الفلكية
       const coords = new Coordinates(latitude, longitude);
+      
+      // معايير متطابقة مع تقويم العراق (أم القرى / رابطة العالم الإسلامي مع مذهب الشافعي)
       const params = CalculationMethod.MuslimWorldLeague();
+      params.madhab = Madhab.Shafi;
+      // تعديل فارق الاحتياط لدقائق الإمساك والمغرب
+      params.adjustments.fajr = 0;
+      params.adjustments.dhuhr = 1;
+      params.adjustments.maghrib = 2;
+
       const date = new Date();
       const prayerTimes = new PrayerTimes(coords, date, params);
 
@@ -92,7 +114,7 @@ export default function PrayerHomeScreen() {
         nextTime = formatTime(prayerMap[next].date);
       }
 
-      // جدولة إشعارات الصلوات المتبقية اليوم
+      // جدولة إشعارات الصلوات
       for (const key of Object.keys(prayerMap)) {
         await schedulePrayerNotification(prayerMap[key].name, prayerMap[key].date);
       }
