@@ -1,13 +1,17 @@
 {
   "cli": {
-    "version": ">= 9.0.0"
+    "version": ">= 24.4.0"
   },
   "build": {
     "preview": {
       "android": {
         "buildType": "apk"
       }
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      }
     }
   }
 }
-
