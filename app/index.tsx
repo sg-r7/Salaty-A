@@ -15,7 +15,7 @@ import {
   registerForPushNotificationsAsync,
   schedulePrayerNotification,
   cancelAllNotifications,
-} from "@/lib/notifications";
+} from "../lib/notifications";
 
 interface PrayerItem {
   name: string;
