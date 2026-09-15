@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { Coordinates, CalculationMethod, PrayerTimes, Madhab } from "adhan";
 import {
+  CalculationMethod,
+  Coordinates,
+  Madhab,
+  PrayerTimes,
+} from "adhan";
+import {
+  cancelAllNotifications,
   registerForPushNotificationsAsync,
   schedulePrayerNotification,
-  cancelAllNotifications,
 } from "../lib/notifications";
 
 interface PrayerItem {
@@ -23,145 +28,270 @@ interface PrayerItem {
   isNext?: boolean;
 }
 
+interface NextPrayerInfo {
+  name: string;
+  time: string;
+}
+
 export default function PrayerHomeScreen() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
-  const [locationName, setLocationName] = useState("جاري تحديد الموقع بدقة...");
+  const [locationName, setLocationName] = useState(
+    "جاري تحديد الموقع بدقة..."
+  );
   const [prayersList, setPrayersList] = useState<PrayerItem[]>([]);
-  const [nextPrayerInfo, setNextPrayerInfo] = useState<{ name: string; time: string }>({
+  const [nextPrayerInfo, setNextPrayerInfo] = useState<NextPrayerInfo>({
     name: "...",
     time: "...",
   });
 
   useEffect(() => {
-    (async () => {
-      await registerForPushNotificationsAsync();
+    let isMounted = true;
 
-      // الإحداثيات الاحتياطية الدقيقة لقضاء الكرمة / الفلوجة
-      let latitude = 33.3850;
-      let longitude = 43.9100;
+    const loadPrayerData = async () => {
+      try {
+        await registerForPushNotificationsAsync();
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
+        let latitude = 33.385;
+        let longitude = 43.91;
 
-      if (status === "granted") {
-        try {
-          // جلب الموقع الفعلي عبر GPS بدقة عالية
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          latitude = loc.coords.latitude;
-          longitude = loc.coords.longitude;
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
 
-          // استخراج اسم المدينة والمنطقة تلقائياً
-          const reverseGeocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-          if (reverseGeocode.length > 0) {
-            const place = reverseGeocode[0];
-            const city = place.district || place.city || place.subregion || "الأنبار";
-            setLocationName(`📍 ${city} (GPS)`);
-          } else {
-            setLocationName("📍 الموقع الحالي (GPS)");
+        if (status === "granted") {
+          try {
+            const location = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+
+            latitude = location.coords.latitude;
+            longitude = location.coords.longitude;
+
+            const reverseGeocode = await Location.reverseGeocodeAsync({
+              latitude,
+              longitude,
+            });
+
+            if (reverseGeocode.length > 0) {
+              const place = reverseGeocode[0];
+              const city =
+                place.district ||
+                place.city ||
+                place.subregion ||
+                "الأنبار";
+
+              if (isMounted) {
+                setLocationName(`📍 ${city} (GPS)`);
+              }
+            } else if (isMounted) {
+              setLocationName("📍 الموقع الحالي (GPS)");
+            }
+          } catch {
+            if (isMounted) {
+              setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
+            }
           }
-        } catch {
+        } else if (isMounted) {
           setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
         }
-      } else {
-        setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
+
+        const coordinates = new Coordinates(latitude, longitude);
+
+        const calculationParameters =
+          CalculationMethod.MuslimWorldLeague();
+
+        calculationParameters.madhab = Madhab.Shafi;
+        calculationParameters.adjustments.fajr = 0;
+        calculationParameters.adjustments.dhuhr = 1;
+        calculationParameters.adjustments.maghrib = 2;
+
+        const date = new Date();
+        const prayerTimes = new PrayerTimes(
+          coordinates,
+          date,
+          calculationParameters
+        );
+
+        const formatTime = (time: Date): string => {
+          return time.toLocaleTimeString("ar-IQ", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        };
+
+        const prayerMap: Record<
+          string,
+          {
+            name: string;
+            date: Date;
+          }
+        > = {
+          fajr: {
+            name: "الفجر",
+            date: prayerTimes.fajr,
+          },
+          sunrise: {
+            name: "الشروق",
+            date: prayerTimes.sunrise,
+          },
+          dhuhr: {
+            name: "الظهر",
+            date: prayerTimes.dhuhr,
+          },
+          asr: {
+            name: "العصر",
+            date: prayerTimes.asr,
+          },
+          maghrib: {
+            name: "المغرب",
+            date: prayerTimes.maghrib,
+          },
+          isha: {
+            name: "العشاء",
+            date: prayerTimes.isha,
+          },
+        };
+
+        const prayers: PrayerItem[] = [
+          {
+            name: "الفجر",
+            time: formatTime(prayerTimes.fajr),
+          },
+          {
+            name: "الشروق",
+            time: formatTime(prayerTimes.sunrise),
+          },
+          {
+            name: "الظهر",
+            time: formatTime(prayerTimes.dhuhr),
+          },
+          {
+            name: "العصر",
+            time: formatTime(prayerTimes.asr),
+          },
+          {
+            name: "المغرب",
+            time: formatTime(prayerTimes.maghrib),
+          },
+          {
+            name: "العشاء",
+            time: formatTime(prayerTimes.isha),
+          },
+        ];
+
+        await cancelAllNotifications();
+
+        const nextPrayer = prayerTimes.nextPrayer();
+
+        let nextPrayerName = "الفجر";
+        let nextPrayerTime = formatTime(prayerTimes.fajr);
+
+        if (nextPrayer && prayerMap[nextPrayer]) {
+          nextPrayerName = prayerMap[nextPrayer].name;
+          nextPrayerTime = formatTime(prayerMap[nextPrayer].date);
+        }
+
+        for (const prayerKey of Object.keys(prayerMap)) {
+          const prayer = prayerMap[prayerKey];
+
+          await schedulePrayerNotification(prayer.name, prayer.date);
+        }
+
+        const updatedPrayers = prayers.map((prayer) => ({
+          ...prayer,
+          isNext: prayer.name === nextPrayerName,
+        }));
+
+        if (isMounted) {
+          setPrayersList(updatedPrayers);
+          setNextPrayerInfo({
+            name: nextPrayerName,
+            time: nextPrayerTime,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load prayer data:", error);
+
+        if (isMounted) {
+          setLocationName("📍 الكرمة / الفلوجة (افتراضي)");
+          setPrayersList([]);
+          setNextPrayerInfo({
+            name: "غير متاح",
+            time: "--:--",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
+    };
 
-      // حساب المواقيت الفلكية
-      const coords = new Coordinates(latitude, longitude);
-      
-      // معايير متطابقة مع تقويم العراق (أم القرى / رابطة العالم الإسلامي مع مذهب الشافعي)
-      const params = CalculationMethod.MuslimWorldLeague();
-      params.madhab = Madhab.Shafi;
-      // تعديل فارق الاحتياط لدقائق الإمساك والمغرب
-      params.adjustments.fajr = 0;
-      params.adjustments.dhuhr = 1;
-      params.adjustments.maghrib = 2;
+    loadPrayerData();
 
-      const date = new Date();
-      const prayerTimes = new PrayerTimes(coords, date, params);
-
-      const formatTime = (d: Date) =>
-        d.toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" });
-
-      const list: PrayerItem[] = [
-        { name: "الفجر", time: formatTime(prayerTimes.fajr) },
-        { name: "الشروق", time: formatTime(prayerTimes.sunrise) },
-        { name: "الظهر", time: formatTime(prayerTimes.dhuhr) },
-        { name: "العصر", time: formatTime(prayerTimes.asr) },
-        { name: "المغرب", time: formatTime(prayerTimes.maghrib) },
-        { name: "العشاء", time: formatTime(prayerTimes.isha) },
-      ];
-
-      // تحديد الصلاة القادمة وجدولة التنبيهات
-      await cancelAllNotifications();
-      const next = prayerTimes.nextPrayer();
-      let nextName = "الفجر";
-      let nextTime = formatTime(prayerTimes.fajr);
-
-      const prayerMap: Record<string, { name: string; date: Date }> = {
-        fajr: { name: "الفجر", date: prayerTimes.fajr },
-        sunrise: { name: "الشروق", date: prayerTimes.sunrise },
-        dhuhr: { name: "الظهر", date: prayerTimes.dhuhr },
-        asr: { name: "العصر", date: prayerTimes.asr },
-        maghrib: { name: "المغرب", date: prayerTimes.maghrib },
-        isha: { name: "العشاء", date: prayerTimes.isha },
-      };
-
-      if (next && prayerMap[next]) {
-        nextName = prayerMap[next].name;
-        nextTime = formatTime(prayerMap[next].date);
-      }
-
-      // جدولة إشعارات الصلوات
-      for (const key of Object.keys(prayerMap)) {
-        await schedulePrayerNotification(prayerMap[key].name, prayerMap[key].date);
-      }
-
-      const updatedList = list.map((item) => ({
-        ...item,
-        isNext: item.name === nextName,
-      }));
-
-      setPrayersList(updatedList);
-      setNextPrayerInfo({ name: nextName, time: nextTime });
-      setLoading(false);
-    })();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>صلاتي | SALATY</Text>
-          <Text style={styles.dateText}>{locationName}</Text>
+          <Text style={styles.locationText}>{locationName}</Text>
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color="#48cae4" style={{ marginVertical: 30 }} />
+          <ActivityIndicator
+            size="large"
+            color="#48cae4"
+            style={styles.loadingIndicator}
+          />
         ) : (
           <>
             <View style={styles.nextPrayerCard}>
               <Text style={styles.nextPrayerLabel}>الصلاة القادمة</Text>
-              <Text style={styles.nextPrayerName}>صلاة {nextPrayerInfo.name}</Text>
-              <Text style={styles.nextPrayerTime}>{nextPrayerInfo.time}</Text>
+
+              <Text style={styles.nextPrayerName}>
+                صلاة {nextPrayerInfo.name}
+              </Text>
+
+              <Text style={styles.nextPrayerTime}>
+                {nextPrayerInfo.time}
+              </Text>
             </View>
 
             <View style={styles.listCard}>
               {prayersList.map((prayer, index) => (
                 <View
-                  key={index}
+                  key={`${prayer.name}-${index}`}
                   style={[
                     styles.prayerRow,
                     prayer.isNext && styles.activePrayerRow,
-                    index === prayersList.length - 1 && { borderBottomWidth: 0 },
+                    index === prayersList.length - 1 &&
+                      styles.lastPrayerRow,
                   ]}
                 >
-                  <Text style={[styles.prayerName, prayer.isNext && styles.activeText]}>
+                  <Text
+                    style={[
+                      styles.prayerName,
+                      prayer.isNext && styles.activeText,
+                    ]}
+                  >
                     {prayer.name}
                   </Text>
-                  <Text style={[styles.prayerTime, prayer.isNext && styles.activeText]}>
+
+                  <Text
+                    style={[
+                      styles.prayerTime,
+                      prayer.isNext && styles.activeText,
+                    ]}
+                  >
                     {prayer.time}
                   </Text>
                 </View>
@@ -172,17 +302,19 @@ export default function PrayerHomeScreen() {
 
         <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={styles.navBtn}
+            activeOpacity={0.8}
+            style={styles.navButton}
             onPress={() => router.push("/qibla")}
           >
-            <Text style={styles.navBtnText}>🧭 اتجاه القبلة</Text>
+            <Text style={styles.navButtonText}>🧭 اتجاه القبلة</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.navBtn}
+            activeOpacity={0.8}
+            style={styles.navButton}
             onPress={() => router.push("/tasbeeh")}
           >
-            <Text style={styles.navBtnText}>📿 المسبحة والأذكار</Text>
+            <Text style={styles.navButtonText}>📿 المسبحة والأذكار</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -191,52 +323,127 @@ export default function PrayerHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b132b" },
-  content: { padding: 20 },
-  header: { alignItems: "center", marginBottom: 15 },
-  title: { fontSize: 24, fontWeight: "bold", color: "#6fffe9" },
-  dateText: { fontSize: 13, color: "#a0aec0", marginTop: 4 },
-  nextPrayerCard: {
-    backgroundColor: "#1c2541",
-    borderRadius: 16,
-    padding: 20,
-    alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#3a506b",
+  container: {
+    flex: 1,
+    backgroundColor: "#0b132b",
   },
-  nextPrayerLabel: { color: "#a0aec0", fontSize: 13 },
-  nextPrayerName: { color: "#ffffff", fontSize: 24, fontWeight: "bold", marginVertical: 4 },
-  nextPrayerTime: { color: "#48cae4", fontSize: 28, fontWeight: "bold" },
+
+  content: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+
+  header: {
+    alignItems: "center",
+    marginBottom: 15,
+  },
+
+  title: {
+    color: "#6fffe9",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+
+  locationText: {
+    color: "#a0aec0",
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: "center",
+  },
+
+  loadingIndicator: {
+    marginVertical: 30,
+  },
+
+  nextPrayerCard: {
+    alignItems: "center",
+    backgroundColor: "#1c2541",
+    borderColor: "#3a506b",
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+    padding: 20,
+  },
+
+  nextPrayerLabel: {
+    color: "#a0aec0",
+    fontSize: 13,
+  },
+
+  nextPrayerName: {
+    color: "#ffffff",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginVertical: 4,
+  },
+
+  nextPrayerTime: {
+    color: "#48cae4",
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+
   listCard: {
     backgroundColor: "#1c2541",
     borderRadius: 14,
-    paddingHorizontal: 16,
     marginBottom: 20,
+    paddingHorizontal: 16,
   },
+
   prayerRow: {
+    alignItems: "center",
+    borderBottomColor: "#2d3748",
+    borderBottomWidth: 1,
     flexDirection: "row-reverse",
     justifyContent: "space-between",
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2d3748",
   },
+
+  lastPrayerRow: {
+    borderBottomWidth: 0,
+  },
+
   activePrayerRow: {
     backgroundColor: "rgba(72, 202, 228, 0.12)",
+    borderRadius: 8,
     marginHorizontal: -10,
     paddingHorizontal: 10,
-    borderRadius: 8,
   },
-  prayerName: { color: "#edf2f7", fontSize: 16, fontWeight: "600" },
-  prayerTime: { color: "#cbd5e0", fontSize: 16 },
-  activeText: { color: "#48cae4", fontWeight: "bold" },
-  buttonRow: { flexDirection: "row", gap: 12 },
-  navBtn: {
-    flex: 1,
-    backgroundColor: "#1f4068",
-    padding: 16,
-    borderRadius: 12,
+
+  prayerName: {
+    color: "#edf2f7",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  prayerTime: {
+    color: "#cbd5e0",
+    fontSize: 16,
+  },
+
+  activeText: {
+    color: "#48cae4",
+    fontWeight: "bold",
+  },
+
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+
+  navButton: {
     alignItems: "center",
+    backgroundColor: "#1f4068",
+    borderRadius: 12,
+    flex: 1,
+    padding: 16,
   },
-  navBtnText: { color: "#ffffff", fontSize: 15, fontWeight: "bold" },
+
+  navButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
 });
+
