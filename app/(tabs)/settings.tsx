@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -284,6 +285,35 @@ export default function SettingsTab() {
       ...notificationSettings,
       ...changes,
     });
+  };
+
+  const handleSupportPress = () => {
+    Alert.alert(
+      "المساعدة والدعم",
+      "تواصل معنا مباشرة عبر الحسابات الرسمية:",
+      [
+        {
+          text: "Instagram",
+          onPress: () => {
+            Linking.openURL(
+              "https://www.instagram.com/sg_r4?stkn=MWNjOTkxeWhhZnFkaA=="
+            );
+          },
+        },
+        {
+          text: "Facebook",
+          onPress: () => {
+            Linking.openURL(
+              "https://www.facebook.com/share/14o7eYLfMYF/"
+            );
+          },
+        },
+        {
+          text: "إلغاء",
+          style: "cancel",
+        },
+      ]
+    );
   };
 
   const handleDetectLocation = async () => {
@@ -703,13 +733,8 @@ export default function SettingsTab() {
             <SettingRow
               icon="help-circle-outline"
               title="المساعدة والدعم"
-              subtitle="تعرف على طريقة استخدام التطبيق"
-              onPress={() =>
-                Alert.alert(
-                  "المساعدة",
-                  "يمكنك تخصيص الموقع وطريقة الحساب والتنبيهات من هذه الشاشة."
-                )
-              }
+              subtitle="تواصل معنا للاستفسارات والدعم الفني"
+              onPress={handleSupportPress}
               color="#77b8e8"
             />
 
@@ -1454,4 +1479,3 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
-
