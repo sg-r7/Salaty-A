@@ -6,8 +6,11 @@ import "../lib/notifications";
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+      </Stack>
     </ThemeProvider>
   );
 }
