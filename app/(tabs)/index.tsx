@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,245 +7,143 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Location from "expo-location";
 import {
   CalculationMethod,
   Coordinates,
   Madhab,
   PrayerTimes,
 } from "adhan";
-import {
-  cancelAllNotifications,
-  registerForPushNotificationsAsync,
-  schedulePrayerNotification,
-} from "../../lib/notifications";
 
 interface PrayerCard {
   id: string;
   name: string;
   time: string;
+  date: Date;
   status: "الآن" | "التالي" | "";
   icon: string;
-  date: Date;
 }
 
-type LocationMode = "local" | "makkah";
+const MECCA_LATITUDE = 21.4225;
+const MECCA_LONGITUDE = 39.8262;
+
+function getPrayerTimes(): PrayerTimes {
+  const coordinates = new Coordinates(
+    MECCA_LATITUDE,
+    MECCA_LONGITUDE
+  );
+
+  const parameters = CalculationMethod.UmmAlQura();
+  parameters.madhab = Madhab.Shafi;
+
+  return new PrayerTimes(
+    coordinates,
+    new Date(),
+    parameters
+  );
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString("ar-SA", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getPrayerCards(): PrayerCard[] {
+  const prayerTimes = getPrayerTimes();
+  const now = new Date();
+
+  const prayers: PrayerCard[] = [
+    {
+      id: "fajr",
+      name: "الفجر",
+      time: formatTime(prayerTimes.fajr),
+      date: prayerTimes.fajr,
+      status: "",
+      icon: "☀",
+    },
+    {
+      id: "dhuhr",
+      name: "الظهر",
+      time: formatTime(prayerTimes.dhuhr),
+      date: prayerTimes.dhuhr,
+      status: "",
+      icon: "◉",
+    },
+    {
+      id: "asr",
+      name: "العصر",
+      time: formatTime(prayerTimes.asr),
+      date: prayerTimes.asr,
+      status: "",
+      icon: "◒",
+    },
+    {
+      id: "maghrib",
+      name: "المغرب",
+      time: formatTime(prayerTimes.maghrib),
+      date: prayerTimes.maghrib,
+      status: "",
+      icon: "☾",
+    },
+    {
+      id: "isha",
+      name: "العشاء",
+      time: formatTime(prayerTimes.isha),
+      date: prayerTimes.isha,
+      status: "",
+      icon: "☽",
+    },
+    {
+      id: "qiyam",
+      name: "قيام الليل",
+      time: "12:30 ص",
+      date: new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        30,
+        0
+      ),
+      status: "",
+      icon: "✦",
+    },
+  ];
+
+  const nextPrayer = prayerTimes.nextPrayer();
+
+  if (nextPrayer) {
+    const nextPrayerId = String(nextPrayer);
+
+    return prayers.map((prayer) => ({
+      ...prayer,
+      status:
+        prayer.id === nextPrayerId
+          ? "التالي"
+          : prayer.date.getTime() <= now.getTime() &&
+            prayer.id !== "qiyam"
+          ? "الآن"
+          : "",
+    }));
+  }
+
+  return prayers.map((prayer) => ({
+    ...prayer,
+    status: prayer.id === "fajr" ? "التالي" : "",
+  }));
+}
 
 export default function HomeTab() {
-  const [loading, setLoading] = useState(true);
-  const [locationMode, setLocationMode] = useState<LocationMode>("local");
-  const [localCityName, setLocalCityName] = useState("الكرمة، الأنبار");
-  const [localCoords, setLocalCoords] = useState<{ latitude: number; longitude: number }>({
-    latitude: 33.385,
-    longitude: 43.91,
-  });
+  const [completedPrayers, setCompletedPrayers] = useState<
+    Record<string, boolean>
+  >({});
 
-  const [prayers, setPrayers] = useState<PrayerCard[]>([]);
-  const [nextPrayerInfo, setNextPrayerInfo] = useState<{
-    name: string;
-    time: string;
-    date: Date | null;
-  }>({
-    name: "--",
-    time: "--:--",
-    date: null,
-  });
-  const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
-  const [completedPrayers, setCompletedPrayers] = useState<Record<string, boolean>>({});
+  const prayers = useMemo(() => getPrayerCards(), []);
 
-  // التاريخ اليومي الفعلي
-  const today = new Date();
-  const dateDay = today.getDate();
-  const dateMonth = today.toLocaleDateString("ar-IQ", { month: "long" });
-
-  // 1. جلب الموقع الجغرافي للجهاز مرة واحدة عند فتح التطبيق
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchLocation = async () => {
-      try {
-        await registerForPushNotificationsAsync();
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status === "granted") {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const lat = loc.coords.latitude;
-          const lng = loc.coords.longitude;
-
-          if (isMounted) {
-            setLocalCoords({ latitude: lat, longitude: lng });
-          }
-
-          const reverseGeocode = await Location.reverseGeocodeAsync({
-            latitude: lat,
-            longitude: lng,
-          });
-
-          if (reverseGeocode.length > 0 && isMounted) {
-            const place = reverseGeocode[0];
-            const city =
-              place.district ||
-              place.city ||
-              place.subregion ||
-              "الأنبار";
-            setLocalCityName(`${city} (GPS)`);
-          }
-        }
-      } catch (err) {
-        console.warn("GPS lookup fallback to default", err);
-      }
-    };
-
-    fetchLocation();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // 2. حساب أوقات الصلاة بناءً على الوضع المختار (محلي أو مكة)
-  useEffect(() => {
-    let isMounted = true;
-
-    const calculateTimes = async () => {
-      setLoading(true);
-      try {
-        let coords: Coordinates;
-        let params: any;
-
-        if (locationMode === "makkah") {
-          // إحداثيات مكة المكرمة وطريقة أم القرى
-          coords = new Coordinates(21.4225, 39.8262);
-          params = CalculationMethod.UmmAlQura();
-        } else {
-          // إحداثيات الموقع الحالي
-          coords = new Coordinates(localCoords.latitude, localCoords.longitude);
-          params = CalculationMethod.MuslimWorldLeague();
-          params.madhab = Madhab.Shafi;
-          params.adjustments.fajr = 0;
-          params.adjustments.dhuhr = 1;
-          params.adjustments.maghrib = 2;
-        }
-
-        const date = new Date();
-        const prayerTimes = new PrayerTimes(coords, date, params);
-
-        const formatTime = (t: Date): string =>
-          t.toLocaleTimeString("ar-IQ", {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-
-        // حساب وقت صلاة القيام (الثلث الأخير من الليل)
-        const tomorrow = new Date(date);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowTimes = new PrayerTimes(coords, tomorrow, params);
-        const nightDuration =
-          tomorrowTimes.fajr.getTime() - prayerTimes.maghrib.getTime();
-        const qiyamDate = new Date(
-          tomorrowTimes.fajr.getTime() - nightDuration / 3
-        );
-
-        const currentPrayerKey = prayerTimes.currentPrayer();
-        const nextPrayerKey = prayerTimes.nextPrayer();
-
-        const prayerListConfig = [
-          { id: "fajr", name: "الفجر", date: prayerTimes.fajr, icon: "☀" },
-          { id: "dhuhr", name: "الظهر", date: prayerTimes.dhuhr, icon: "◉" },
-          { id: "asr", name: "العصر", date: prayerTimes.asr, icon: "◒" },
-          { id: "maghrib", name: "المغرب", date: prayerTimes.maghrib, icon: "☾" },
-          { id: "isha", name: "العشاء", date: prayerTimes.isha, icon: "☽" },
-          { id: "qiyam", name: "قيام الليل", date: qiyamDate, icon: "✦" },
-        ];
-
-        const calculatedPrayers: PrayerCard[] = prayerListConfig.map((p) => {
-          let prayerStatus: "الآن" | "التالي" | "" = "";
-          if (p.id === currentPrayerKey) prayerStatus = "الآن";
-          else if (p.id === nextPrayerKey) prayerStatus = "التالي";
-
-          return {
-            id: p.id,
-            name: p.name,
-            time: formatTime(p.date),
-            status: prayerStatus,
-            icon: p.icon,
-            date: p.date,
-          };
-        });
-
-        let nextPName = "الفجر";
-        let nextPTime = formatTime(prayerTimes.fajr);
-        let nextPDate: Date | null = prayerTimes.fajr;
-
-        const nextObj = calculatedPrayers.find((p) => p.id === nextPrayerKey);
-        if (nextObj) {
-          nextPName = nextObj.name;
-          nextPTime = nextObj.time;
-          nextPDate = nextObj.date;
-        }
-
-        // جدولة التنبيهات إذا كان على الوضع المحلي
-        if (locationMode === "local") {
-          await cancelAllNotifications();
-          for (const p of calculatedPrayers) {
-            await schedulePrayerNotification(p.name, p.date);
-          }
-        }
-
-        if (isMounted) {
-          setPrayers(calculatedPrayers);
-          setNextPrayerInfo({
-            name: nextPName,
-            time: nextPTime,
-            date: nextPDate,
-          });
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Calculation error:", error);
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    calculateTimes();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [locationMode, localCoords]);
-
-  // 3. عداد تنازلي حي للصلاة القادمة بالثواني
-  useEffect(() => {
-    if (!nextPrayerInfo.date) return;
-
-    const updateCountdown = () => {
-      const diff = nextPrayerInfo.date!.getTime() - Date.now();
-      if (diff <= 0) {
-        setTimeLeft("00:00:00");
-      } else {
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        setTimeLeft(
-          `${hours.toString().padStart(2, "0")}:${minutes
-            .toString()
-            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-        );
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [nextPrayerInfo.date]);
-
-  const completedCount = useMemo(
-    () =>
-      prayers.filter((prayer) => completedPrayers[prayer.id]).length,
-    [completedPrayers, prayers]
-  );
+  const completedCount = prayers.filter(
+    (prayer) => completedPrayers[prayer.id]
+  ).length;
 
   const togglePrayer = (id: string) => {
     setCompletedPrayers((current) => ({
@@ -255,193 +152,162 @@ export default function HomeTab() {
     }));
   };
 
+  const nextPrayer =
+    prayers.find((prayer) => prayer.status === "التالي") ||
+    prayers[0];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* الترويسة والتاريخ */}
         <View style={styles.topRow}>
           <View>
             <Text style={styles.greeting}>السلام عليكم</Text>
-            <Text style={styles.subGreeting}>أهلاً بك في صلاتي</Text>
+            <Text style={styles.subGreeting}>
+              أهلاً بك في صلاتي
+            </Text>
           </View>
 
           <View style={styles.dateBadge}>
-            <Text style={styles.dateDay}>{dateDay}</Text>
-            <Text style={styles.dateMonth}>{dateMonth}</Text>
+            <Text style={styles.dateIcon}>🕋</Text>
+            <Text style={styles.dateMonth}>مكة</Text>
           </View>
         </View>
 
-        {/* شريط اختيار الموقع (محلي / مكة المكرمة) */}
-        <View style={styles.modeSelector}>
-          <Pressable
-            onPress={() => setLocationMode("local")}
-            style={[
-              styles.modeButton,
-              locationMode === "local" && styles.modeButtonActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.modeButtonText,
-                locationMode === "local" && styles.modeButtonTextActive,
-              ]}
-            >
-              📍 {localCityName}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setLocationMode("makkah")}
-            style={[
-              styles.modeButton,
-              locationMode === "makkah" && styles.modeButtonActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.modeButtonText,
-                locationMode === "makkah" && styles.modeButtonTextActive,
-              ]}
-            >
-              🕋 مكة المكرمة
-            </Text>
-          </Pressable>
+        <View style={styles.locationRow}>
+          <Text style={styles.locationIcon}>🕋</Text>
+          <Text style={styles.locationText}>مكة المكرمة 🕋</Text>
+          <Text style={styles.locationHint}>توقيت أم القرى</Text>
         </View>
 
-        {loading ? (
-          <ActivityIndicator
-            size="large"
-            color="#72efdd"
-            style={{ marginVertical: 40 }}
-          />
-        ) : (
-          <>
-            {/* كرت الصلاة القادمة الكبير */}
-            <View style={styles.nextCard}>
-              <View style={styles.nextCardTop}>
-                <Text style={styles.nextLabel}>الصلاة القادمة</Text>
-                <Text style={styles.nextStatus}>بعد {timeLeft}</Text>
-              </View>
+        <View style={styles.nextCard}>
+          <View style={styles.nextCardTop}>
+            <Text style={styles.nextLabel}>الصلاة القادمة</Text>
+            <Text style={styles.nextStatus}>حسب توقيت مكة</Text>
+          </View>
 
-              <View style={styles.nextCardBottom}>
-                <View>
-                  <Text style={styles.nextPrayerName}>
-                    {nextPrayerInfo.name}
-                  </Text>
-                  <Text style={styles.nextPrayerTime}>
-                    {nextPrayerInfo.time}
-                  </Text>
-                </View>
-
-                <View style={styles.moonCircle}>
-                  <Text style={styles.moonIcon}>☾</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* عنوان القسم وعدد المكتمل */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>مواقيت اليوم</Text>
-              <Text style={styles.completedText}>
-                {completedCount} / {prayers.length} مكتملة
+          <View style={styles.nextCardBottom}>
+            <View>
+              <Text style={styles.nextPrayerName}>
+                {nextPrayer.name}
+              </Text>
+              <Text style={styles.nextPrayerTime}>
+                {nextPrayer.time}
               </Text>
             </View>
 
-            {/* شريط الكروت المنزلق أفقياً */}
-            <ScrollView
-              horizontal
-              inverted
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carousel}
-            >
-              {prayers.map((prayer) => {
-                const completed = Boolean(completedPrayers[prayer.id]);
+            <View style={styles.moonCircle}>
+              <Text style={styles.moonIcon}>☾</Text>
+            </View>
+          </View>
+        </View>
 
-                return (
-                  <View
-                    key={prayer.id}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>مواقيت اليوم</Text>
+          <Text style={styles.completedText}>
+            {completedCount} / {prayers.length} مكتملة
+          </Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          inverted
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carousel}
+        >
+          {prayers.map((prayer) => {
+            const completed = Boolean(
+              completedPrayers[prayer.id]
+            );
+
+            return (
+              <View
+                key={prayer.id}
+                style={[
+                  styles.prayerCard,
+                  prayer.status === "الآن" &&
+                    styles.currentCard,
+                  prayer.status === "التالي" &&
+                    styles.nextPrayerCard,
+                ]}
+              >
+                <View style={styles.prayerCardHeader}>
+                  <Text style={styles.prayerIcon}>
+                    {prayer.icon}
+                  </Text>
+
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: completed }}
+                    onPress={() => togglePrayer(prayer.id)}
                     style={[
-                      styles.prayerCard,
-                      prayer.status === "الآن" && styles.currentCard,
-                      prayer.status === "التالي" && styles.nextPrayerCard,
+                      styles.checkbox,
+                      completed && styles.checkboxChecked,
                     ]}
                   >
-                    <View style={styles.prayerCardHeader}>
-                      <Text style={styles.prayerIcon}>{prayer.icon}</Text>
+                    {completed ? (
+                      <Text style={styles.checkmark}>✓</Text>
+                    ) : null}
+                  </Pressable>
+                </View>
 
-                      <Pressable
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: completed }}
-                        onPress={() => togglePrayer(prayer.id)}
-                        style={[
-                          styles.checkbox,
-                          completed && styles.checkboxChecked,
-                        ]}
-                      >
-                        {completed ? (
-                          <Text style={styles.checkmark}>✓</Text>
-                        ) : null}
-                      </Pressable>
-                    </View>
-
-                    <Text style={styles.cardPrayerName}>{prayer.name}</Text>
-                    <Text
-                      style={[
-                        styles.cardPrayerTime,
-                        completed && styles.completedPrayerTime,
-                      ]}
-                    >
-                      {prayer.time}
-                    </Text>
-
-                    {prayer.status ? (
-                      <View style={styles.statusBadge}>
-                        <Text style={styles.statusText}>{prayer.status}</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.emptyStatus} />
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            {/* بطاقة الإنجاز اليومي */}
-            <View style={styles.progressCard}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>إنجازك اليوم</Text>
-                <Text style={styles.progressPercentage}>
-                  {prayers.length > 0
-                    ? Math.round((completedCount / prayers.length) * 100)
-                    : 0}
-                  %
+                <Text style={styles.cardPrayerName}>
+                  {prayer.name}
                 </Text>
-              </View>
 
-              <View style={styles.progressTrack}>
-                <View
+                <Text
                   style={[
-                    styles.progressFill,
-                    {
-                      width: `${
-                        prayers.length > 0
-                          ? (completedCount / prayers.length) * 100
-                          : 0
-                      }%`,
-                    },
+                    styles.cardPrayerTime,
+                    completed && styles.completedPrayerTime,
                   ]}
-                />
-              </View>
+                >
+                  {prayer.time}
+                </Text>
 
-              <Text style={styles.progressDescription}>
-                سجّل صلواتك لتحافظ على استمراريتك اليومية
-              </Text>
-            </View>
-          </>
-        )}
+                {prayer.status ? (
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusText}>
+                      {prayer.status}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.emptyStatus} />
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressTitle}>إنجازك اليوم</Text>
+            <Text style={styles.progressPercentage}>
+              {Math.round(
+                (completedCount / prayers.length) * 100
+              )}
+              %
+            </Text>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.round(
+                    (completedCount / prayers.length) * 100
+                  )}%`,
+                },
+              ]}
+            />
+          </View>
+
+          <Text style={styles.progressDescription}>
+            سجّل صلواتك لتحافظ على استمراريتك اليومية
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -460,7 +326,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row-reverse",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 18,
   },
   greeting: {
     color: "#f5f7fb",
@@ -471,7 +337,7 @@ const styles = StyleSheet.create({
   subGreeting: {
     color: "#8e9bb0",
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 5,
     textAlign: "right",
   },
   dateBadge: {
@@ -484,40 +350,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  dateDay: {
-    color: "#72efdd",
+  dateIcon: {
     fontSize: 20,
-    fontWeight: "800",
   },
   dateMonth: {
-    color: "#aebbd0",
+    color: "#72efdd",
     fontSize: 11,
-    marginTop: 1,
+    fontWeight: "800",
+    marginTop: 3,
   },
-  modeSelector: {
-    backgroundColor: "#111d35",
-    borderRadius: 14,
-    flexDirection: "row-reverse",
-    marginBottom: 20,
-    padding: 4,
-  },
-  modeButton: {
+  locationRow: {
     alignItems: "center",
-    borderRadius: 10,
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 10,
+    backgroundColor: "#111d35",
+    borderRadius: 12,
+    flexDirection: "row-reverse",
+    marginBottom: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
   },
-  modeButtonActive: {
-    backgroundColor: "#1e3150",
+  locationIcon: {
+    fontSize: 19,
+    marginLeft: 8,
   },
-  modeButtonText: {
-    color: "#75849c",
-    fontSize: 12,
+  locationText: {
+    color: "#e9eef7",
+    fontSize: 13,
     fontWeight: "700",
   },
-  modeButtonTextActive: {
-    color: "#72efdd",
+  locationHint: {
+    color: "#75849c",
+    fontSize: 11,
+    marginRight: "auto",
   },
   nextCard: {
     backgroundColor: "#183c52",
