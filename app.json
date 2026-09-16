@@ -22,9 +22,21 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
       ]
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#72efdd"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "4bf2ced3-ea86-4b0f-b8bc-68cedba244c6"
@@ -32,3 +44,4 @@
     }
   }
 }
+
