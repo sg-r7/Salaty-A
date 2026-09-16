@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -12,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from "expo-av";
 
 interface Surah {
   id: number;
@@ -28,6 +30,30 @@ interface LastRead {
   ayah: number;
   date: string;
 }
+
+interface Reciter {
+  id: string;
+  name: string;
+  serverUrl: string;
+}
+
+const RECITERS: Reciter[] = [
+  {
+    id: "lhdan",
+    name: "محمد اللحيدان",
+    serverUrl: "https://server8.mp3quran.net/lhdan",
+  },
+  {
+    id: "yasser",
+    name: "ياسر الدوسري",
+    serverUrl: "https://server11.mp3quran.net/yasser",
+  },
+  {
+    id: "basit",
+    name: "عبدالباسط عبدالصمد",
+    serverUrl: "https://server7.mp3quran.net/basit",
+  },
+];
 
 const STORAGE_KEY_LAST_READ = "@salaty_quran_last_read";
 
@@ -155,9 +181,32 @@ export default function QuranTab() {
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
   const [fontSize, setFontSize] = useState(20);
 
+  // Audio State
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [selectedReciter, setSelectedReciter] = useState<Reciter>(RECITERS[0]);
+
   useEffect(() => {
     loadLastRead();
+    return () => {
+      stopAndUnloadSound();
+    };
   }, []);
+
+  const stopAndUnloadSound = async () => {
+    if (sound) {
+      try {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+      } catch {
+        // Ignored
+      }
+      setSound(null);
+    }
+    setIsPlaying(false);
+    setIsLoadingAudio(false);
+  };
 
   const loadLastRead = async () => {
     try {
@@ -182,6 +231,77 @@ export default function QuranTab() {
       setLastRead(record);
     } catch {
       // Ignored
+    }
+  };
+
+  const handleCloseReader = async () => {
+    await stopAndUnloadSound();
+    setSelectedSurah(null);
+  };
+
+  const playAudio = async (reciterToUse = selectedReciter) => {
+    if (!selectedSurah) return;
+
+    try {
+      setIsLoadingAudio(true);
+      if (sound) {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+
+      const formattedNumber = String(selectedSurah.id).padStart(3, "0");
+      const audioUri = `${reciterToUse.serverUrl}/${formattedNumber}.mp3`;
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        (status) => {
+          if (status.isLoaded) {
+            setIsPlaying(status.isPlaying);
+            if (status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          }
+        }
+      );
+
+      setSound(newSound);
+      setIsPlaying(true);
+    } catch (error) {
+      console.error("Audio playback error:", error);
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  };
+
+  const togglePlayPause = async () => {
+    if (isLoadingAudio) return;
+
+    if (!sound) {
+      await playAudio();
+      return;
+    }
+
+    if (isPlaying) {
+      await sound.pauseAsync();
+      setIsPlaying(false);
+    } else {
+      await sound.playAsync();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleSelectReciter = async (reciter: Reciter) => {
+    setSelectedReciter(reciter);
+    if (isPlaying || sound) {
+      await playAudio(reciter);
     }
   };
 
@@ -367,12 +487,12 @@ export default function QuranTab() {
         <Modal
           visible={selectedSurah !== null}
           animationType="slide"
-          onRequestClose={() => setSelectedSurah(null)}
+          onRequestClose={handleCloseReader}
         >
           <SafeAreaView style={styles.modalSafeArea}>
             <View style={styles.modalHeader}>
               <Pressable
-                onPress={() => setSelectedSurah(null)}
+                onPress={handleCloseReader}
                 style={styles.modalCloseBtn}
               >
                 <Ionicons name="close" size={24} color="#f5f7fb" />
@@ -404,6 +524,68 @@ export default function QuranTab() {
               </View>
             </View>
 
+            {/* Audio Recitation Player Bar */}
+            <View style={styles.playerContainer}>
+              <View style={styles.recitersSelector}>
+                {RECITERS.map((r) => {
+                  const isCurrent = r.id === selectedReciter.id;
+                  return (
+                    <Pressable
+                      key={r.id}
+                      onPress={() => handleSelectReciter(r)}
+                      style={[
+                        styles.reciterChip,
+                        isCurrent && styles.reciterChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.reciterChipText,
+                          isCurrent && styles.reciterChipTextActive,
+                        ]}
+                      >
+                        {r.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.playerActionsRow}>
+                <Pressable
+                  onPress={togglePlayPause}
+                  disabled={isLoadingAudio}
+                  style={styles.playButton}
+                >
+                  {isLoadingAudio ? (
+                    <ActivityIndicator size="small" color="#102337" />
+                  ) : (
+                    <Ionicons
+                      name={isPlaying ? "pause" : "play"}
+                      size={20}
+                      color="#102337"
+                    />
+                  )}
+                  <Text style={styles.playButtonText}>
+                    {isLoadingAudio
+                      ? "جارٍ التحميل..."
+                      : isPlaying
+                      ? "إيقاف مؤقت"
+                      : `استماع بصوت ${selectedReciter.name}`}
+                  </Text>
+                </Pressable>
+
+                {sound ? (
+                  <Pressable
+                    onPress={stopAndUnloadSound}
+                    style={styles.stopButton}
+                  >
+                    <Ionicons name="stop" size={18} color="#ee91ab" />
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+
             <ScrollView
               contentContainerStyle={styles.readerContent}
               showsVerticalScrollIndicator={false}
@@ -420,7 +602,7 @@ export default function QuranTab() {
                 <Text style={[styles.surahMainText, { fontSize, lineHeight: fontSize * 2 }]}>
                   {selectedSurah?.name === "الفاتحة"
                     ? "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ﴿١﴾ الرَّحْمَٰنِ الرَّحِيمِ ﴿٢﴾ مَالِكِ يَوْمِ الدِّينِ ﴿٣﴾ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ﴿٤﴾ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ﴿٥﴾ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ﴿٦﴾"
-                    : `سورة ${selectedSurah?.name} مكتوبة بالرسم العثماني. يمكنك قراءة السورة والاستماع إليها عبر المصحف الرقمي.`}
+                    : `سورة ${selectedSurah?.name} مكتوبة بالرسم العثماني. يمكنك قراءة السورة والاستماع إليها مباشرة بصوت القارئ المختار أعلاه.`}
                 </Text>
               </View>
 
@@ -695,6 +877,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
+  playerContainer: {
+    backgroundColor: "#121f36",
+    borderBottomColor: "#243857",
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  recitersSelector: {
+    flexDirection: "row-reverse",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  reciterChip: {
+    backgroundColor: "#182c47",
+    borderColor: "#2a4160",
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  reciterChipActive: {
+    backgroundColor: "#1c414e",
+    borderColor: "#72efdd",
+  },
+  reciterChipText: {
+    color: "#8391a7",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  reciterChipTextActive: {
+    color: "#72efdd",
+    fontWeight: "800",
+  },
+  playerActionsRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  playButton: {
+    alignItems: "center",
+    backgroundColor: "#72efdd",
+    borderRadius: 11,
+    flexDirection: "row-reverse",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    gap: 6,
+  },
+  playButtonText: {
+    color: "#102337",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  stopButton: {
+    alignItems: "center",
+    backgroundColor: "#2a1c27",
+    borderColor: "#704158",
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
   readerContent: {
     padding: 20,
     paddingBottom: 40,
@@ -730,4 +977,3 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 });
-
