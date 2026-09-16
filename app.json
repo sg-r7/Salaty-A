@@ -2,7 +2,7 @@
   "expo": {
     "name": "صلاتي | SALATY",
     "slug": "salaty-app",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -13,19 +13,22 @@
     },
     "android": {
       "package": "com.salaty.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#071739"
       },
       "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "WAKE_LOCK"
       ]
     },
     "plugins": [
@@ -44,4 +47,3 @@
     }
   }
 }
-
