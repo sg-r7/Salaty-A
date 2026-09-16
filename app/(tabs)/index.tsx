@@ -8,14 +8,15 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import FeaturesModal, {
+  FeatureKey,
+} from "../../src/components/FeaturesModal";
 import { usePrayer } from "../../src/context/PrayerContext";
 
-interface PrayerIconMap {
-  [key: string]: string;
-}
-
-const prayerIcons: PrayerIconMap = {
+const prayerIcons: Record<string, string> = {
   fajr: "☀",
   sunrise: "◒",
   dhuhr: "☼",
@@ -64,24 +65,6 @@ function formatHijriDate(date: Date, offset: number): string {
   );
 }
 
-function getCurrentPrayerId(
-  prayerTimes: Array<{
-    id: string;
-    date: Date;
-  }>,
-  now: Date
-): string | null {
-  const elapsedPrayers = prayerTimes.filter(
-    (prayer) => prayer.date.getTime() <= now.getTime()
-  );
-
-  if (elapsedPrayers.length === 0) {
-    return null;
-  }
-
-  return elapsedPrayers[elapsedPrayers.length - 1].id;
-}
-
 function getPrayerGreeting(hour: number): string {
   if (hour >= 4 && hour < 12) {
     return "صباح الخير";
@@ -99,11 +82,15 @@ function getPrayerGreeting(hour: number): string {
 }
 
 export default function HomeTab() {
+  const router = useRouter();
+
   const {
     prayerTimes,
     location,
     nextPrayer,
     hijriDateOffset,
+    periodMode,
+    setPeriodMode,
     loading,
     error,
     refreshPrayerData,
@@ -111,6 +98,7 @@ export default function HomeTab() {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [featuresVisible, setFeaturesVisible] = useState(false);
   const [completedPrayers, setCompletedPrayers] = useState<
     Record<string, boolean>
   >({});
@@ -125,10 +113,7 @@ export default function HomeTab() {
     };
   }, []);
 
-  const currentPrayerId = useMemo(
-    () => getCurrentPrayerId(prayerTimes, currentTime),
-    [currentTime, prayerTimes]
-  );
+  const greeting = getPrayerGreeting(currentTime.getHours());
 
   const countdown = useMemo(() => {
     if (!nextPrayer) {
@@ -140,19 +125,17 @@ export default function HomeTab() {
     );
   }, [currentTime, nextPrayer]);
 
-  const completedCount = useMemo(
-    () =>
-      prayerTimes.filter(
-        (prayer) =>
-          prayer.id !== "sunrise" &&
-          completedPrayers[prayer.id] === true
-      ).length,
-    [completedPrayers, prayerTimes]
-  );
-
   const trackablePrayers = useMemo(
     () => prayerTimes.filter((prayer) => prayer.id !== "sunrise"),
     [prayerTimes]
+  );
+
+  const completedCount = useMemo(
+    () =>
+      trackablePrayers.filter(
+        (prayer) => completedPrayers[prayer.id] === true
+      ).length,
+    [completedPrayers, trackablePrayers]
   );
 
   const progressPercentage =
@@ -162,7 +145,19 @@ export default function HomeTab() {
           (completedCount / trackablePrayers.length) * 100
         );
 
-  const greeting = getPrayerGreeting(currentTime.getHours());
+  const currentPrayer = useMemo(() => {
+    const elapsedPrayers = prayerTimes.filter(
+      (prayer) =>
+        prayer.id !== "sunrise" &&
+        prayer.date.getTime() <= currentTime.getTime()
+    );
+
+    if (elapsedPrayers.length === 0) {
+      return null;
+    }
+
+    return elapsedPrayers[elapsedPrayers.length - 1];
+  }, [currentTime, prayerTimes]);
 
   const togglePrayerCompletion = (prayerId: string) => {
     setCompletedPrayers((current) => ({
@@ -179,6 +174,48 @@ export default function HomeTab() {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleFeaturePress = (feature: FeatureKey) => {
+    setFeaturesVisible(false);
+
+    if (feature === "qibla") {
+      router.push("/qibla");
+      return;
+    }
+
+    if (feature === "tasbeeh") {
+      router.push("/tasbeeh");
+      return;
+    }
+
+    if (feature === "namesOfAllah") {
+      router.push("/names-of-allah");
+      return;
+    }
+
+    if (feature === "zakat") {
+      router.push("/zakat");
+      return;
+    }
+
+    if (feature === "calendar") {
+      router.push("/calendar");
+      return;
+    }
+
+    if (feature === "hajjUmrah") {
+      router.push("/hajj-umrah");
+      return;
+    }
+
+    if (feature === "settings") {
+      router.push("/settings");
+    }
+  };
+
+  const handlePeriodModeChange = async (enabled: boolean) => {
+    await setPeriodMode(enabled);
   };
 
   return (
@@ -204,10 +241,24 @@ export default function HomeTab() {
             </Text>
           </View>
 
-          <View style={styles.kaabaBadge}>
-            <Text style={styles.kaabaIcon}>🕋</Text>
-            <Text style={styles.kaabaLabel}>صلاتي</Text>
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="فتح نافذة الميزات"
+            onPress={() => setFeaturesVisible(true)}
+            style={({ pressed }) => [
+              styles.featuresTopButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="apps-outline"
+              size={25}
+              color="#72efdd"
+            />
+            <Text style={styles.featuresTopButtonText}>
+              الميزات
+            </Text>
+          </Pressable>
         </View>
 
         <View style={styles.dateCard}>
@@ -238,7 +289,7 @@ export default function HomeTab() {
               {location.city}
             </Text>
             <Text style={styles.locationSubtitle}>
-              مواقيت الصلاة حسب موقعك المحفوظ
+              مواقيت الصلاة حسب الموقع المحفوظ
             </Text>
           </View>
 
@@ -249,6 +300,29 @@ export default function HomeTab() {
             </Text>
           </View>
         </View>
+
+        {periodMode ? (
+          <View style={styles.periodNotice}>
+            <Ionicons
+              name="heart-outline"
+              size={21}
+              color="#ee91ab"
+            />
+
+            <Text style={styles.periodNoticeText}>
+              وضع الدورة مفعّل. تم إيقاف تنبيهات الصلاة مؤقتاً.
+            </Text>
+
+            <Pressable
+              onPress={() => handlePeriodModeChange(false)}
+              style={styles.periodDisableButton}
+            >
+              <Text style={styles.periodDisableText}>
+                إيقاف
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {loading && prayerTimes.length === 0 ? (
           <View style={styles.loadingCard}>
@@ -286,13 +360,13 @@ export default function HomeTab() {
                 الصلاة القادمة
               </Text>
               <Text style={styles.nextPrayerHint}>
-                الوقت المتبقي
+                الوقت المتبقي على الأذان
               </Text>
             </View>
 
             <View style={styles.nextPrayerBadge}>
               <Text style={styles.nextPrayerBadgeText}>
-                توقيت محلي
+                {periodMode ? "الوضع الخاص" : "مواقيت اليوم"}
               </Text>
             </View>
           </View>
@@ -309,7 +383,7 @@ export default function HomeTab() {
                 </Text>
 
                 <Text style={styles.countdownLabel}>
-                  متبقي على الأذان
+                  متبقي
                 </Text>
 
                 <Text style={styles.countdown}>{countdown}</Text>
@@ -326,9 +400,6 @@ export default function HomeTab() {
               <Text style={styles.finishedDayIcon}>✓</Text>
               <Text style={styles.finishedDayText}>
                 انتهت مواقيت اليوم
-              </Text>
-              <Text style={styles.finishedDayHint}>
-                ستظهر مواقيت الغد عند تحديث البيانات
               </Text>
             </View>
           )}
@@ -351,8 +422,8 @@ export default function HomeTab() {
           {prayerTimes.map((prayer) => {
             const isCompleted =
               completedPrayers[prayer.id] === true;
-            const isCurrent = prayer.id === currentPrayerId;
-            const isNext = prayer.id === nextPrayer?.id;
+            const isCurrent = currentPrayer?.id === prayer.id;
+            const isNext = nextPrayer?.id === prayer.id;
             const isSunrise = prayer.id === "sunrise";
 
             return (
@@ -366,13 +437,7 @@ export default function HomeTab() {
                 ]}
               >
                 <View style={styles.prayerCardTop}>
-                  <View
-                    style={[
-                      styles.prayerIconContainer,
-                      isCurrent &&
-                        styles.currentPrayerIconContainer,
-                    ]}
-                  >
+                  <View style={styles.prayerIconContainer}>
                     <Text style={styles.prayerIcon}>
                       {prayerIcons[prayer.id] || "◉"}
                     </Text>
@@ -381,7 +446,6 @@ export default function HomeTab() {
                   {!isSunrise ? (
                     <Pressable
                       accessibilityRole="checkbox"
-                      accessibilityLabel={`تسجيل أداء صلاة ${prayer.name}`}
                       accessibilityState={{
                         checked: isCompleted,
                       }}
@@ -464,9 +528,7 @@ export default function HomeTab() {
             <View
               style={[
                 styles.progressFill,
-                {
-                  width: `${progressPercentage}%`,
-                },
+                { width: `${progressPercentage}%` },
               ]}
             />
           </View>
@@ -478,10 +540,28 @@ export default function HomeTab() {
 
         <View style={styles.quickActionsHeader}>
           <Text style={styles.sectionTitle}>اختصارات سريعة</Text>
+
+          <Pressable
+            onPress={() => setFeaturesVisible(true)}
+            style={styles.moreButton}
+          >
+            <Text style={styles.moreButtonText}>كل الميزات</Text>
+            <Ionicons
+              name="chevron-back"
+              size={15}
+              color="#72efdd"
+            />
+          </Pressable>
         </View>
 
         <View style={styles.quickActions}>
-          <Pressable style={styles.quickActionCard}>
+          <Pressable
+            onPress={() => router.push("/qibla")}
+            style={({ pressed }) => [
+              styles.quickActionCard,
+              pressed && styles.pressed,
+            ]}
+          >
             <View
               style={[
                 styles.quickActionIcon,
@@ -490,15 +570,23 @@ export default function HomeTab() {
             >
               <Text style={styles.quickActionEmoji}>🧭</Text>
             </View>
+
             <Text style={styles.quickActionTitle}>
               اتجاه القبلة
             </Text>
+
             <Text style={styles.quickActionSubtitle}>
               تحديد الاتجاه
             </Text>
           </Pressable>
 
-          <Pressable style={styles.quickActionCard}>
+          <Pressable
+            onPress={() => router.push("/quran")}
+            style={({ pressed }) => [
+              styles.quickActionCard,
+              pressed && styles.pressed,
+            ]}
+          >
             <View
               style={[
                 styles.quickActionIcon,
@@ -507,15 +595,23 @@ export default function HomeTab() {
             >
               <Text style={styles.quickActionEmoji}>📖</Text>
             </View>
+
             <Text style={styles.quickActionTitle}>
               القرآن الكريم
             </Text>
+
             <Text style={styles.quickActionSubtitle}>
               قراءة واستماع
             </Text>
           </Pressable>
 
-          <Pressable style={styles.quickActionCard}>
+          <Pressable
+            onPress={() => router.push("/azkar")}
+            style={({ pressed }) => [
+              styles.quickActionCard,
+              pressed && styles.pressed,
+            ]}
+          >
             <View
               style={[
                 styles.quickActionIcon,
@@ -524,14 +620,22 @@ export default function HomeTab() {
             >
               <Text style={styles.quickActionEmoji}>✦</Text>
             </View>
-            <Text style={styles.quickActionTitle}>
-              الأذكار
-            </Text>
+
+            <Text style={styles.quickActionTitle}>الأذكار</Text>
+
             <Text style={styles.quickActionSubtitle}>
               وردك اليومي
             </Text>
           </Pressable>
         </View>
+
+        <FeaturesModal
+          visible={featuresVisible}
+          onClose={() => setFeaturesVisible(false)}
+          periodMode={periodMode}
+          onPeriodModeChange={handlePeriodModeChange}
+          onFeaturePress={handleFeaturePress}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -581,27 +685,27 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  kaabaBadge: {
+  featuresTopButton: {
     alignItems: "center",
     backgroundColor: "#172946",
-    borderColor: "#2f486c",
-    borderRadius: 17,
+    borderColor: "#2f5368",
+    borderRadius: 15,
     borderWidth: 1,
-    height: 68,
     justifyContent: "center",
-    marginLeft: 15,
-    width: 68,
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
 
-  kaabaIcon: {
-    fontSize: 28,
-  },
-
-  kaabaLabel: {
+  featuresTopButtonText: {
     color: "#72efdd",
     fontSize: 10,
     fontWeight: "800",
-    marginTop: 2,
+    marginTop: 3,
+  },
+
+  pressed: {
+    opacity: 0.75,
   },
 
   dateCard: {
@@ -704,6 +808,39 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  periodNotice: {
+    alignItems: "center",
+    backgroundColor: "#352735",
+    borderColor: "#704158",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row-reverse",
+    marginBottom: 18,
+    padding: 12,
+  },
+
+  periodNoticeText: {
+    color: "#e1bdc9",
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 18,
+    marginHorizontal: 8,
+    textAlign: "right",
+  },
+
+  periodDisableButton: {
+    backgroundColor: "#81465e",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+
+  periodDisableText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
   loadingCard: {
     alignItems: "center",
     backgroundColor: "#121f36",
@@ -731,7 +868,6 @@ const styles = StyleSheet.create({
   },
 
   errorIcon: {
-    alignItems: "center",
     backgroundColor: "#c66b7e",
     borderRadius: 15,
     color: "#ffffff",
@@ -850,7 +986,6 @@ const styles = StyleSheet.create({
   countdown: {
     color: "#ffffff",
     fontSize: 21,
-    fontVariant: ["tabular-nums"],
     fontWeight: "800",
     letterSpacing: 1,
     marginTop: 3,
@@ -888,12 +1023,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "800",
     marginTop: 9,
-  },
-
-  finishedDayHint: {
-    color: "#9fc5c9",
-    fontSize: 11,
-    marginTop: 5,
   },
 
   sectionHeader: {
@@ -957,10 +1086,6 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: "center",
     width: 36,
-  },
-
-  currentPrayerIconContainer: {
-    backgroundColor: "rgba(114, 239, 221, 0.22)",
   },
 
   prayerIcon: {
@@ -1126,8 +1251,24 @@ const styles = StyleSheet.create({
   },
 
   quickActionsHeader: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
     marginBottom: 13,
     marginTop: 24,
+  },
+
+  moreButton: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    padding: 5,
+  },
+
+  moreButtonText: {
+    color: "#72efdd",
+    fontSize: 11,
+    fontWeight: "800",
+    marginLeft: 3,
   },
 
   quickActions: {
