@@ -36,7 +36,10 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#72efdd"
+          "color": "#72efdd",
+          "sounds": [
+            "./assets/makkah.mp3"
+          ]
         }
       ]
     ],
@@ -47,3 +50,4 @@
     }
   }
 }
+
