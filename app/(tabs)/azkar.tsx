@@ -1,208 +1,399 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-interface ZikrCategory {
+type AzkarCategory = "morning" | "evening" | "after_prayer" | "sleep";
+
+interface Zikr {
   id: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  color: string;
-  items: string[];
+  category: AzkarCategory;
+  text: string;
+  targetCount: number;
+  reward?: string;
+  reference?: string;
 }
 
-const categories: ZikrCategory[] = [
+const STORAGE_KEY_AZKAR = "@salaty_azkar_counts";
+
+const CATEGORIES: Array<{
+  id: AzkarCategory;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+}> = [
+  { id: "morning", title: "أذكار الصباح", icon: "sunny-outline", color: "#f6c667" },
+  { id: "evening", title: "أذكار المساء", icon: "moon-outline", color: "#72efdd" },
+  { id: "after_prayer", title: "بعد الصلاة", icon: "sparkles-outline", color: "#a78bfa" },
+  { id: "sleep", title: "أذكار النوم", icon: "bed-outline", color: "#77b8e8" },
+];
+
+const AZKAR_DATA: Zikr[] = [
+  // Morning
   {
-    id: "morning",
-    title: "أذكار الصباح",
-    subtitle: "من بعد صلاة الفجر إلى شروق الشمس",
-    icon: "☀",
-    color: "#c79643",
-    items: [
-      "أصبحنا وأصبح الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له.",
-      "اللهم بك أصبحنا وبك أمسينا، وبك نحيا وبك نموت وإليك النشور.",
-      "رضيت بالله رباً، وبالإسلام ديناً، وبمحمد صلى الله عليه وسلم نبياً.",
-    ],
+    id: "m1",
+    category: "morning",
+    text: "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ.",
+    targetCount: 1,
+    reference: "رواه مسلم",
   },
   {
-    id: "evening",
-    title: "أذكار المساء",
-    subtitle: "من بعد صلاة العصر إلى غروب الشمس",
-    icon: "☾",
-    color: "#72a4d4",
-    items: [
-      "أمسينا وأمسى الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له.",
-      "اللهم إني أسألك العفو والعافية في الدنيا والآخرة.",
-      "حسبي الله لا إله إلا هو، عليه توكلت وهو رب العرش العظيم.",
-    ],
+    id: "m2",
+    category: "morning",
+    text: "اللَّهُمَّ أَنْتَ رَبِّي لاَ إِلَهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ لَكَ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لاَ يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ.",
+    targetCount: 1,
+    reward: "من قالها موقناً بها حين يمسي فمات من ليلته دخل الجنة، وكذلك إذا أصبح.",
+    reference: "سيد الاستغفار - رواه البخاري",
   },
   {
-    id: "sleep",
-    title: "أذكار النوم",
-    subtitle: "قبل الخلود إلى النوم",
-    icon: "☽",
-    color: "#a487d6",
-    items: [
-      "باسمك اللهم أموت وأحيا.",
-      "اللهم قني عذابك يوم تبعث عبادك.",
-      "اللهم أسلمت نفسي إليك، ووجهت وجهي إليك، وفوضت أمري إليك.",
-    ],
+    id: "m3",
+    category: "morning",
+    text: "بِسْمِ اللَّهِ الَّذِي لاَ يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الأَرْضِ وَلاَ فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ.",
+    targetCount: 3,
+    reward: "لم يضره شيء.",
+    reference: "رواه الترمذي وأبو داود",
   },
   {
-    id: "mosque",
-    title: "أذكار المسجد",
-    subtitle: "عند الذهاب إلى المسجد ودخوله",
-    icon: "⌂",
-    color: "#72c7b6",
-    items: [
-      "اللهم اجعل في قلبي نوراً، وفي بصري نوراً، وفي سمعي نوراً.",
-      "اللهم افتح لي أبواب رحمتك.",
-      "بسم الله، والصلاة والسلام على رسول الله.",
-    ],
+    id: "m4",
+    category: "morning",
+    text: "رَضِيتُ بِاللَّهِ رَبّاً، وَبِالإِسْلاَمِ دِيناً، وَبِمُحَمَّدٍ صلى الله عليه وسلم نَبِيّاً.",
+    targetCount: 3,
+    reward: "كان حقاً على الله أن يرضيه.",
+    reference: "رواه الترمذي",
+  },
+  {
+    id: "m5",
+    category: "morning",
+    text: "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ: عَدَدَ خَلْقِهِ، وَرِضَا نَفْسِهِ، وَزِنَةَ عَرْشِهِ، وَمِدَادَ كَلِمَاتِهِ.",
+    targetCount: 3,
+    reference: "رواه مسلم",
+  },
+  {
+    id: "m6",
+    category: "morning",
+    text: "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ.",
+    targetCount: 100,
+    reward: "حُطّت خطاياه وإن كانت مثل زبد البحر.",
+    reference: "رواه البخاري ومسلم",
+  },
+
+  // Evening
+  {
+    id: "e1",
+    category: "evening",
+    text: "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ.",
+    targetCount: 1,
+    reference: "رواه مسلم",
+  },
+  {
+    id: "e2",
+    category: "evening",
+    text: "أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ.",
+    targetCount: 3,
+    reward: "لم تضره حمة تلك الليلة.",
+    reference: "رواه مسلم",
+  },
+  {
+    id: "e3",
+    category: "evening",
+    text: "اللَّهُمَّ بِكَ أَمْسَيْنَا، وَبِكَ أَصْبَحْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ، وَإِلَيْكَ الْمَصِيرُ.",
+    targetCount: 1,
+    reference: "رواه الترمذي",
+  },
+  {
+    id: "e4",
+    category: "evening",
+    text: "بِسْمِ اللَّهِ الَّذِي لاَ يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الأَرْضِ وَلاَ فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ.",
+    targetCount: 3,
+    reference: "رواه الترمذي",
+  },
+
+  // After Prayer
+  {
+    id: "ap1",
+    category: "after_prayer",
+    text: "أَسْتَغْفِرُ اللَّهَ، أَسْتَغْفِرُ اللَّهَ، أَسْتَغْفِرُ اللَّهَ، اللَّهُمَّ أَنْتَ السَّلاَمُ وَمِنْكَ السَّلاَمُ، تَبَارَكْتَ يَا ذَا الْجَلاَلِ وَالإِكْرَامِ.",
+    targetCount: 1,
+    reference: "رواه مسلم",
+  },
+  {
+    id: "ap2",
+    category: "after_prayer",
+    text: "لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، لاَ حَوْلَ وَلاَ قُوَّةَ إِلاَّ بِاللَّهِ.",
+    targetCount: 1,
+    reference: "رواه مسلم",
+  },
+  {
+    id: "ap3",
+    category: "after_prayer",
+    text: "سُبْحَانَ اللَّهِ.",
+    targetCount: 33,
+    reference: "التسبيح بعد الصلاة",
+  },
+  {
+    id: "ap4",
+    category: "after_prayer",
+    text: "الْحَمْدُ لِلَّهِ.",
+    targetCount: 33,
+    reference: "التحميد بعد الصلاة",
+  },
+  {
+    id: "ap5",
+    category: "after_prayer",
+    text: "اللَّهُ أَكْبَرُ.",
+    targetCount: 33,
+    reference: "التكبير بعد الصلاة",
+  },
+  {
+    id: "ap6",
+    category: "after_prayer",
+    text: "لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ.",
+    targetCount: 1,
+    reward: "تمام المائة - غفرت خطاياه وإن كانت مثل زبد البحر.",
+    reference: "رواه مسلم",
+  },
+
+  // Sleep
+  {
+    id: "s1",
+    category: "sleep",
+    text: "بِاسْمِكَ رَبِّي وَضَعْتُ جَنْبِي، وَبِكَ أَرْفَعُهُ، فَإِن أَمْسَكْتَ نَفْسِي فارْحَمْهَا، وَإِنْ أَرْسَلْتَهَا فَاحْفَظْهَا بِمَا تَحْفَظُ بِهِ عِبَادَكَ الصَّالِحِينَ.",
+    targetCount: 1,
+    reference: "رواه البخاري ومسلم",
+  },
+  {
+    id: "s2",
+    category: "sleep",
+    text: "اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ.",
+    targetCount: 3,
+    reference: "رواه أبو داود والترمذي",
+  },
+  {
+    id: "s3",
+    category: "sleep",
+    text: "سُبْحَانَ اللَّهِ (٣٣)، وَالْحَمْدُ لِلَّهِ (٣٣)، وَاللَّهُ أَكْبَرُ (٣٤).",
+    targetCount: 1,
+    reward: "خير لكما من خادم.",
+    reference: "رواه البخاري ومسلم",
   },
 ];
 
 export default function AzkarTab() {
-  const [openCategory, setOpenCategory] = useState<string | null>(
-    "morning"
-  );
-  const [completedItems, setCompletedItems] = useState<
-    Record<string, boolean>
-  >({});
+  const [activeCategory, setActiveCategory] = useState<AzkarCategory>("morning");
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
-  const toggleCategory = (id: string) => {
-    setOpenCategory((current) => (current === id ? null : id));
+  useEffect(() => {
+    loadCounts();
+  }, []);
+
+  const loadCounts = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY_AZKAR);
+      if (stored) {
+        setCounts(JSON.parse(stored));
+      }
+    } catch {
+      // Ignored
+    }
   };
 
-  const toggleItem = (key: string) => {
-    setCompletedItems((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
+  const saveCounts = async (updated: Record<string, number>) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_AZKAR, JSON.stringify(updated));
+    } catch {
+      // Ignored
+    }
+  };
+
+  const currentAzkar = useMemo(() => {
+    return AZKAR_DATA.filter((z) => z.category === activeCategory);
+  }, [activeCategory]);
+
+  const categoryProgress = useMemo(() => {
+    if (currentAzkar.length === 0) return 0;
+    const completed = currentAzkar.filter((z) => {
+      const current = counts[z.id] || 0;
+      return current >= z.targetCount;
+    }).length;
+    return Math.round((completed / currentAzkar.length) * 100);
+  }, [counts, currentAzkar]);
+
+  const handleIncrement = (zikr: Zikr) => {
+    const current = counts[zikr.id] || 0;
+    if (current < zikr.targetCount) {
+      const updated = { ...counts, [zikr.id]: current + 1 };
+      setCounts(updated);
+      saveCounts(updated);
+    }
+  };
+
+  const handleResetCategory = () => {
+    Alert.alert("إعادة ضبط", "هل تريد تصفير عداد أذكار هذا القسم؟", [
+      { text: "إلغاء", style: "cancel" },
+      {
+        text: "تصفير",
+        style: "destructive",
+        onPress: () => {
+          const updated = { ...counts };
+          currentAzkar.forEach((z) => {
+            delete updated[z.id];
+          });
+          setCounts(updated);
+          saveCounts(updated);
+        },
+      },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>الأدعية والأذكار</Text>
-          <Text style={styles.subtitle}>وَاذْكُر رَّبَّكَ إِذَا نَسِيتَ</Text>
-        </View>
-
-        <View style={styles.dailyCard}>
-          <View style={styles.dailyIconCircle}>
-            <Text style={styles.dailyIcon}>✦</Text>
+          <View>
+            <Text style={styles.title}>الأذكار والورد اليومي</Text>
+            <Text style={styles.subtitle}>أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ</Text>
           </View>
 
-          <View style={styles.dailyTextBox}>
-            <Text style={styles.dailyTitle}>وردك اليومي</Text>
-            <Text style={styles.dailySubtitle}>
-              اجعل لسانك رطباً بذكر الله
-            </Text>
+          <View style={styles.headerIcon}>
+            <Ionicons name="heart-outline" size={26} color="#72efdd" />
           </View>
-
-          <Text style={styles.dailyCount}>
-            {Object.values(completedItems).filter(Boolean).length} / 12
-          </Text>
         </View>
 
-        <View style={styles.categories}>
-          {categories.map((category) => {
-            const isOpen = openCategory === category.id;
+        {/* Categories Bar */}
+        <ScrollView
+          horizontal
+          inverted
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesScroll}
+        >
+          {CATEGORIES.map((cat) => {
+            const isSelected = cat.id === activeCategory;
+            return (
+              <Pressable
+                key={cat.id}
+                onPress={() => setActiveCategory(cat.id)}
+                style={[
+                  styles.categoryChip,
+                  isSelected && styles.categoryChipActive,
+                ]}
+              >
+                <Ionicons
+                  name={cat.icon}
+                  size={18}
+                  color={isSelected ? "#102337" : cat.color}
+                />
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isSelected && styles.categoryChipTextActive,
+                  ]}
+                >
+                  {cat.title}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Progress Card */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressTopRow}>
+            <View>
+              <Text style={styles.progressTitle}>إنجاز الورد</Text>
+              <Text style={styles.progressSubtitle}>
+                أتممت {currentAzkar.filter((z) => (counts[z.id] || 0) >= z.targetCount).length} من {currentAzkar.length} أذكار
+              </Text>
+            </View>
+
+            <View style={styles.progressRightGroup}>
+              <Text style={styles.progressPercentage}>{categoryProgress}%</Text>
+              <Pressable onPress={handleResetCategory} style={styles.resetBtn}>
+                <Ionicons name="refresh-outline" size={16} color="#72efdd" />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${categoryProgress}%` }]} />
+          </View>
+        </View>
+
+        {/* Azkar List */}
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {currentAzkar.map((zikr, index) => {
+            const current = counts[zikr.id] || 0;
+            const isDone = current >= zikr.targetCount;
+            const remaining = zikr.targetCount - current;
 
             return (
-              <View key={category.id} style={styles.categoryWrapper}>
-                <Pressable
-                  onPress={() => toggleCategory(category.id)}
-                  style={styles.categoryHeader}
-                >
-                  <View
-                    style={[
-                      styles.categoryIconBox,
-                      { backgroundColor: `${category.color}25` },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryIcon,
-                        { color: category.color },
-                      ]}
-                    >
-                      {category.icon}
-                    </Text>
+              <View
+                key={zikr.id}
+                style={[styles.zikrCard, isDone && styles.zikrCardDone]}
+              >
+                <View style={styles.zikrHeader}>
+                  <View style={styles.zikrIndexBadge}>
+                    <Text style={styles.zikrIndexText}>{index + 1}</Text>
                   </View>
 
-                  <View style={styles.categoryTextBox}>
-                    <Text style={styles.categoryTitle}>
-                      {category.title}
-                    </Text>
-                    <Text style={styles.categorySubtitle}>
-                      {category.subtitle}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.categoryArrow}>
-                    {isOpen ? "⌃" : "⌄"}
+                  <Text style={styles.zikrTargetText}>
+                    التكرار: {zikr.targetCount}
                   </Text>
-                </Pressable>
+                </View>
 
-                {isOpen ? (
-                  <View style={styles.zikrList}>
-                    {category.items.map((item, index) => {
-                      const itemKey = `${category.id}-${index}`;
-                      const completed = Boolean(completedItems[itemKey]);
+                <Text style={styles.zikrText}>{zikr.text}</Text>
 
-                      return (
-                        <Pressable
-                          key={itemKey}
-                          onPress={() => toggleItem(itemKey)}
-                          style={[
-                            styles.zikrItem,
-                            completed && styles.completedItem,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.zikrCheck,
-                              completed && styles.zikrCheckCompleted,
-                            ]}
-                          >
-                            {completed ? (
-                              <Text style={styles.checkText}>✓</Text>
-                            ) : (
-                              <Text style={styles.itemNumber}>
-                                {index + 1}
-                              </Text>
-                            )}
-                          </View>
-
-                          <Text
-                            style={[
-                              styles.zikrText,
-                              completed && styles.completedText,
-                            ]}
-                          >
-                            {item}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                {zikr.reward ? (
+                  <View style={styles.rewardBox}>
+                    <Ionicons name="star" size={14} color="#f6c667" />
+                    <Text style={styles.rewardText}>{zikr.reward}</Text>
                   </View>
                 ) : null}
+
+                {zikr.reference ? (
+                  <Text style={styles.referenceText}>{zikr.reference}</Text>
+                ) : null}
+
+                {/* Counter Interactive Button */}
+                <Pressable
+                  disabled={isDone}
+                  onPress={() => handleIncrement(zikr)}
+                  style={({ pressed }) => [
+                    styles.counterButton,
+                    isDone && styles.counterButtonDone,
+                    pressed && !isDone && styles.counterButtonPressed,
+                  ]}
+                >
+                  {isDone ? (
+                    <View style={styles.doneRow}>
+                      <Ionicons name="checkmark-circle" size={20} color="#102337" />
+                      <Text style={styles.doneText}>تم بحمد الله</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.countingRow}>
+                      <Text style={styles.remainingText}>متبقي {remaining}</Text>
+                      <View style={styles.currentBadge}>
+                        <Text style={styles.currentBadgeText}>{current}</Text>
+                      </View>
+                    </View>
+                  )}
+                </Pressable>
               </View>
             );
           })}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -213,165 +404,239 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    padding: 20,
-    paddingBottom: 35,
+    flex: 1,
+    paddingHorizontal: 20,
   },
   header: {
-    marginBottom: 20,
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    paddingTop: 8,
   },
   title: {
     color: "#f5f7fb",
-    fontSize: 27,
+    fontSize: 25,
     fontWeight: "800",
     textAlign: "right",
   },
   subtitle: {
     color: "#72efdd",
-    fontSize: 14,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 4,
     textAlign: "right",
   },
-  dailyCard: {
+  headerIcon: {
     alignItems: "center",
+    backgroundColor: "rgba(114, 239, 221, 0.13)",
+    borderColor: "#2b6e7d",
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  categoriesScroll: {
+    gap: 10,
+    paddingBottom: 14,
+  },
+  categoryChip: {
+    alignItems: "center",
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row-reverse",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  categoryChipActive: {
+    backgroundColor: "#72efdd",
+    borderColor: "#72efdd",
+  },
+  categoryChipText: {
+    color: "#8391a7",
+    fontSize: 13,
+    fontWeight: "700",
+    marginRight: 6,
+  },
+  categoryChipTextActive: {
+    color: "#102337",
+    fontWeight: "800",
+  },
+  progressCard: {
     backgroundColor: "#183c52",
     borderColor: "#2b6e7d",
-    borderRadius: 19,
+    borderRadius: 16,
     borderWidth: 1,
-    flexDirection: "row-reverse",
-    marginBottom: 20,
-    padding: 16,
+    marginBottom: 14,
+    padding: 14,
   },
-  dailyIconCircle: {
+  progressTopRow: {
     alignItems: "center",
-    backgroundColor: "rgba(114, 239, 221, 0.16)",
-    borderRadius: 25,
-    height: 50,
-    justifyContent: "center",
-    width: 50,
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
   },
-  dailyIcon: {
-    color: "#72efdd",
-    fontSize: 25,
-  },
-  dailyTextBox: {
-    flex: 1,
-    marginHorizontal: 11,
-  },
-  dailyTitle: {
+  progressTitle: {
     color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  dailySubtitle: {
-    color: "#a8ced2",
-    fontSize: 11,
-    marginTop: 5,
-    textAlign: "right",
-  },
-  dailyCount: {
-    color: "#72efdd",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  categories: {
-    gap: 12,
-  },
-  categoryWrapper: {
-    backgroundColor: "#121e35",
-    borderColor: "#223654",
-    borderRadius: 17,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  categoryHeader: {
-    alignItems: "center",
-    flexDirection: "row-reverse",
-    minHeight: 78,
-    paddingHorizontal: 14,
-  },
-  categoryIconBox: {
-    alignItems: "center",
-    borderRadius: 13,
-    height: 43,
-    justifyContent: "center",
-    width: 43,
-  },
-  categoryIcon: {
-    fontSize: 23,
-  },
-  categoryTextBox: {
-    flex: 1,
-    marginHorizontal: 11,
-  },
-  categoryTitle: {
-    color: "#edf2f8",
     fontSize: 15,
     fontWeight: "800",
     textAlign: "right",
   },
-  categorySubtitle: {
-    color: "#8290a7",
-    fontSize: 10,
-    marginTop: 5,
+  progressSubtitle: {
+    color: "#a8cdd1",
+    fontSize: 11,
+    marginTop: 3,
     textAlign: "right",
   },
-  categoryArrow: {
+  progressRightGroup: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  progressPercentage: {
     color: "#72efdd",
-    fontSize: 22,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  resetBtn: {
+    alignItems: "center",
+    backgroundColor: "rgba(114, 239, 221, 0.15)",
+    borderRadius: 8,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  progressBarBg: {
+    backgroundColor: "#112637",
+    borderRadius: 4,
+    height: 7,
+    marginTop: 12,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    backgroundColor: "#72efdd",
+    borderRadius: 4,
+    height: "100%",
+  },
+  listContent: {
+    paddingBottom: 35,
+  },
+  zikrCard: {
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 15,
+  },
+  zikrCardDone: {
+    borderColor: "#337267",
+    opacity: 0.85,
+  },
+  zikrHeader: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  zikrIndexBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(114, 239, 221, 0.12)",
+    borderRadius: 9,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  zikrIndexText: {
+    color: "#72efdd",
+    fontSize: 12,
     fontWeight: "800",
   },
-  zikrList: {
-    borderTopColor: "#263750",
-    borderTopWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
+  zikrTargetText: {
+    color: "#8391a7",
+    fontSize: 11,
+    fontWeight: "700",
   },
-  zikrItem: {
+  zikrText: {
+    color: "#edf3f9",
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 28,
+    textAlign: "right",
+  },
+  rewardBox: {
     alignItems: "flex-start",
-    borderBottomColor: "#24344c",
-    borderBottomWidth: 1,
-    flexDirection: "row-reverse",
-    paddingVertical: 14,
-  },
-  completedItem: {
-    opacity: 0.55,
-  },
-  zikrCheck: {
-    alignItems: "center",
-    borderColor: "#62738c",
-    borderRadius: 7,
+    backgroundColor: "rgba(246, 198, 103, 0.1)",
+    borderColor: "rgba(246, 198, 103, 0.25)",
+    borderRadius: 10,
     borderWidth: 1,
-    height: 25,
-    justifyContent: "center",
-    marginLeft: 10,
-    marginTop: 2,
-    width: 25,
+    flexDirection: "row-reverse",
+    marginTop: 10,
+    padding: 9,
   },
-  zikrCheckCompleted: {
+  rewardText: {
+    color: "#f6c667",
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 18,
+    marginRight: 6,
+    textAlign: "right",
+  },
+  referenceText: {
+    color: "#6b7c93",
+    fontSize: 11,
+    marginTop: 8,
+    textAlign: "right",
+  },
+  counterButton: {
+    alignItems: "center",
+    backgroundColor: "#1b2f4a",
+    borderColor: "#2f5379",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row-reverse",
+    justifyContent: "center",
+    marginTop: 14,
+    paddingVertical: 12,
+  },
+  counterButtonPressed: {
+    backgroundColor: "#223d60",
+    transform: [{ scale: 0.99 }],
+  },
+  counterButtonDone: {
     backgroundColor: "#72efdd",
     borderColor: "#72efdd",
   },
-  checkText: {
-    color: "#102337",
-    fontSize: 16,
-    fontWeight: "900",
+  countingRow: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    gap: 10,
   },
-  itemNumber: {
-    color: "#9aa8ba",
-    fontSize: 11,
+  remainingText: {
+    color: "#f5f7fb",
+    fontSize: 14,
     fontWeight: "800",
   },
-  zikrText: {
-    color: "#dce5f0",
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 25,
-    textAlign: "right",
+  currentBadge: {
+    backgroundColor: "rgba(114, 239, 221, 0.15)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  completedText: {
-    color: "#8da4a9",
-    textDecorationLine: "line-through",
+  currentBadgeText: {
+    color: "#72efdd",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  doneRow: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    gap: 6,
+  },
+  doneText: {
+    color: "#102337",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
-
