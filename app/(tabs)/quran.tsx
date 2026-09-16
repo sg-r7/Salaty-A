@@ -1,182 +1,597 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Audio, AVPlaybackStatus } from "expo-av";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Surah {
-  id: number;
+  number: number;
   name: string;
   verses: number;
 }
 
 interface Juz {
-  id: number;
+  number: number;
   name: string;
-  start: string;
 }
 
-const surahs: Surah[] = [
-  { id: 1, name: "الفاتحة", verses: 7 },
-  { id: 2, name: "البقرة", verses: 286 },
-  { id: 3, name: "آل عمران", verses: 200 },
-  { id: 4, name: "النساء", verses: 176 },
-  { id: 5, name: "المائدة", verses: 120 },
-  { id: 6, name: "الأنعام", verses: 165 },
-  { id: 7, name: "الأعراف", verses: 206 },
-  { id: 8, name: "الأنفال", verses: 75 },
-  { id: 9, name: "التوبة", verses: 129 },
-  { id: 10, name: "يونس", verses: 109 },
-  { id: 11, name: "هود", verses: 123 },
-  { id: 12, name: "يوسف", verses: 111 },
-  { id: 13, name: "الرعد", verses: 43 },
-  { id: 14, name: "إبراهيم", verses: 52 },
-  { id: 15, name: "الحجر", verses: 99 },
-  { id: 16, name: "النحل", verses: 128 },
-  { id: 17, name: "الإسراء", verses: 111 },
-  { id: 18, name: "الكهف", verses: 110 },
-  { id: 19, name: "مريم", verses: 98 },
-  { id: 20, name: "طه", verses: 135 },
-  { id: 21, name: "الأنبياء", verses: 112 },
-  { id: 22, name: "الحج", verses: 78 },
-  { id: 23, name: "المؤمنون", verses: 118 },
-  { id: 24, name: "النور", verses: 64 },
-  { id: 25, name: "الفرقان", verses: 77 },
-  { id: 26, name: "الشعراء", verses: 227 },
-  { id: 27, name: "النمل", verses: 93 },
-  { id: 28, name: "القصص", verses: 88 },
-  { id: 29, name: "العنكبوت", verses: 69 },
-  { id: 30, name: "الروم", verses: 60 },
-  { id: 31, name: "لقمان", verses: 34 },
-  { id: 32, name: "السجدة", verses: 30 },
-  { id: 33, name: "الأحزاب", verses: 73 },
-  { id: 34, name: "سبأ", verses: 54 },
-  { id: 35, name: "فاطر", verses: 45 },
-  { id: 36, name: "يس", verses: 83 },
-  { id: 37, name: "الصافات", verses: 182 },
-  { id: 38, name: "ص", verses: 88 },
-  { id: 39, name: "الزمر", verses: 75 },
-  { id: 40, name: "غافر", verses: 85 },
-  { id: 41, name: "فصلت", verses: 54 },
-  { id: 42, name: "الشورى", verses: 53 },
-  { id: 43, name: "الزخرف", verses: 89 },
-  { id: 44, name: "الدخان", verses: 59 },
-  { id: 45, name: "الجاثية", verses: 37 },
-  { id: 46, name: "الأحقاف", verses: 35 },
-  { id: 47, name: "محمد", verses: 38 },
-  { id: 48, name: "الفتح", verses: 29 },
-  { id: 49, name: "الحجرات", verses: 18 },
-  { id: 50, name: "ق", verses: 45 },
-  { id: 51, name: "الذاريات", verses: 60 },
-  { id: 52, name: "الطور", verses: 49 },
-  { id: 53, name: "النجم", verses: 62 },
-  { id: 54, name: "القمر", verses: 55 },
-  { id: 55, name: "الرحمن", verses: 78 },
-  { id: 56, name: "الواقعة", verses: 96 },
-  { id: 57, name: "الحديد", verses: 29 },
-  { id: 58, name: "المجادلة", verses: 22 },
-  { id: 59, name: "الحشر", verses: 24 },
-  { id: 60, name: "الممتحنة", verses: 13 },
-  { id: 61, name: "الصف", verses: 14 },
-  { id: 62, name: "الجمعة", verses: 11 },
-  { id: 63, name: "المنافقون", verses: 11 },
-  { id: 64, name: "التغابن", verses: 18 },
-  { id: 65, name: "الطلاق", verses: 12 },
-  { id: 66, name: "التحريم", verses: 12 },
-  { id: 67, name: "الملك", verses: 30 },
-  { id: 68, name: "القلم", verses: 52 },
-  { id: 69, name: "الحاقة", verses: 52 },
-  { id: 70, name: "المعارج", verses: 44 },
-  { id: 71, name: "نوح", verses: 28 },
-  { id: 72, name: "الجن", verses: 28 },
-  { id: 73, name: "المزمل", verses: 20 },
-  { id: 74, name: "المدثر", verses: 56 },
-  { id: 75, name: "القيامة", verses: 40 },
-  { id: 76, name: "الإنسان", verses: 31 },
-  { id: 77, name: "المرسلات", verses: 50 },
-  { id: 78, name: "النبأ", verses: 40 },
-  { id: 79, name: "النازعات", verses: 46 },
-  { id: 80, name: "عبس", verses: 42 },
-  { id: 81, name: "التكوير", verses: 29 },
-  { id: 82, name: "الانفطار", verses: 19 },
-  { id: 83, name: "المطففين", verses: 36 },
-  { id: 84, name: "الانشقاق", verses: 25 },
-  { id: 85, name: "البروج", verses: 22 },
-  { id: 86, name: "الطارق", verses: 17 },
-  { id: 87, name: "الأعلى", verses: 19 },
-  { id: 88, name: "الغاشية", verses: 26 },
-  { id: 89, name: "الفجر", verses: 30 },
-  { id: 90, name: "البلد", verses: 20 },
-  { id: 91, name: "الشمس", verses: 15 },
-  { id: 92, name: "الليل", verses: 21 },
-  { id: 93, name: "الضحى", verses: 11 },
-  { id: 94, name: "الشرح", verses: 8 },
-  { id: 95, name: "التين", verses: 8 },
-  { id: 96, name: "العلق", verses: 19 },
-  { id: 97, name: "القدر", verses: 5 },
-  { id: 98, name: "البينة", verses: 8 },
-  { id: 99, name: "الزلزلة", verses: 8 },
-  { id: 100, name: "العاديات", verses: 11 },
-  { id: 101, name: "القارعة", verses: 11 },
-  { id: 102, name: "التكاثر", verses: 8 },
-  { id: 103, name: "العصر", verses: 3 },
-  { id: 104, name: "الهمزة", verses: 9 },
-  { id: 105, name: "الفيل", verses: 5 },
-  { id: 106, name: "قريش", verses: 4 },
-  { id: 107, name: "الماعون", verses: 7 },
-  { id: 108, name: "الكوثر", verses: 3 },
-  { id: 109, name: "الكافرون", verses: 6 },
-  { id: 110, name: "النصر", verses: 3 },
-  { id: 111, name: "المسد", verses: 5 },
-  { id: 112, name: "الإخلاص", verses: 4 },
-  { id: 113, name: "الفلق", verses: 5 },
-  { id: 114, name: "الناس", verses: 6 },
+interface QuranAyah {
+  numberInSurah: number;
+  text: string;
+}
+
+interface QuranResponse {
+  data?: {
+    name: string;
+    ayahs: QuranAyah[];
+  };
+}
+
+type ActiveTab = "surahs" | "juzs";
+type ReaderType = "surah" | "juz";
+
+interface ReaderTarget {
+  type: ReaderType;
+  number: number;
+  title: string;
+}
+
+interface Reciter {
+  id: string;
+  name: string;
+  url: string;
+}
+
+const surahNames = [
+  "الفاتحة",
+  "البقرة",
+  "آل عمران",
+  "النساء",
+  "المائدة",
+  "الأنعام",
+  "الأعراف",
+  "الأنفال",
+  "التوبة",
+  "يونس",
+  "هود",
+  "يوسف",
+  "الرعد",
+  "إبراهيم",
+  "الحجر",
+  "النحل",
+  "الإسراء",
+  "الكهف",
+  "مريم",
+  "طه",
+  "الأنبياء",
+  "الحج",
+  "المؤمنون",
+  "النور",
+  "الفرقان",
+  "الشعراء",
+  "النمل",
+  "القصص",
+  "العنكبوت",
+  "الروم",
+  "لقمان",
+  "السجدة",
+  "الأحزاب",
+  "سبأ",
+  "فاطر",
+  "يس",
+  "الصافات",
+  "ص",
+  "الزمر",
+  "غافر",
+  "فصلت",
+  "الشورى",
+  "الزخرف",
+  "الدخان",
+  "الجاثية",
+  "الأحقاف",
+  "محمد",
+  "الفتح",
+  "الحجرات",
+  "ق",
+  "الذاريات",
+  "الطور",
+  "النجم",
+  "القمر",
+  "الرحمن",
+  "الواقعة",
+  "الحديد",
+  "المجادلة",
+  "الحشر",
+  "الممتحنة",
+  "الصف",
+  "الجمعة",
+  "المنافقون",
+  "التغابن",
+  "الطلاق",
+  "التحريم",
+  "الملك",
+  "القلم",
+  "الحاقة",
+  "المعارج",
+  "نوح",
+  "الجن",
+  "المزمل",
+  "المدثر",
+  "القيامة",
+  "الإنسان",
+  "المرسلات",
+  "النبأ",
+  "النازعات",
+  "عبس",
+  "التكوير",
+  "الانفطار",
+  "المطففين",
+  "الانشقاق",
+  "البروج",
+  "الطارق",
+  "الأعلى",
+  "الغاشية",
+  "الفجر",
+  "البلد",
+  "الشمس",
+  "الليل",
+  "الضحى",
+  "الشرح",
+  "التين",
+  "العلق",
+  "القدر",
+  "البينة",
+  "الزلزلة",
+  "العاديات",
+  "القارعة",
+  "التكاثر",
+  "العصر",
+  "الهمزة",
+  "الفيل",
+  "قريش",
+  "الماعون",
+  "الكوثر",
+  "الكافرون",
+  "النصر",
+  "المسد",
+  "الإخلاص",
+  "الفلق",
+  "الناس",
 ];
 
-const juzs: Juz[] = [
-  { id: 1, name: "الجزء الأول", start: "الفاتحة 1" },
-  { id: 2, name: "الجزء الثاني", start: "البقرة 142" },
-  { id: 3, name: "الجزء الثالث", start: "البقرة 253" },
-  { id: 4, name: "الجزء الرابع", start: "آل عمران 93" },
-  { id: 5, name: "الجزء الخامس", start: "النساء 24" },
-  { id: 6, name: "الجزء السادس", start: "النساء 148" },
-  { id: 7, name: "الجزء السابع", start: "المائدة 82" },
-  { id: 8, name: "الجزء الثامن", start: "الأنعام 111" },
-  { id: 9, name: "الجزء التاسع", start: "الأعراف 88" },
-  { id: 10, name: "الجزء العاشر", start: "الأنفال 41" },
-  { id: 11, name: "الجزء الحادي عشر", start: "التوبة 94" },
-  { id: 12, name: "الجزء الثاني عشر", start: "هود 6" },
-  { id: 13, name: "الجزء الثالث عشر", start: "يوسف 53" },
-  { id: 14, name: "الجزء الرابع عشر", start: "الحجر 1" },
-  { id: 15, name: "الجزء الخامس عشر", start: "الإسراء 1" },
-  { id: 16, name: "الجزء السادس عشر", start: "الكهف 75" },
-  { id: 17, name: "الجزء السابع عشر", start: "الأنبياء 1" },
-  { id: 18, name: "الجزء الثامن عشر", start: "المؤمنون 1" },
-  { id: 19, name: "الجزء التاسع عشر", start: "الفرقان 21" },
-  { id: 20, name: "الجزء العشرون", start: "النمل 56" },
-  { id: 21, name: "الجزء الحادي والعشرون", start: "العنكبوت 46" },
-  { id: 22, name: "الجزء الثاني والعشرون", start: "الأحزاب 31" },
-  { id: 23, name: "الجزء الثالث والعشرون", start: "يس 22" },
-  { id: 24, name: "الجزء الرابع والعشرون", start: "الزمر 32" },
-  { id: 25, name: "الجزء الخامس والعشرون", start: "فصلت 47" },
-  { id: 26, name: "الجزء السادس والعشرون", start: "الأحقاف 1" },
-  { id: 27, name: "الجزء السابع والعشرون", start: "الذاريات 31" },
-  { id: 28, name: "الجزء الثامن والعشرون", start: "المجادلة 1" },
-  { id: 29, name: "الجزء التاسع والعشرون", start: "الملك 1" },
-  { id: 30, name: "الجزء الثلاثون", start: "النبأ 1" },
+const verseCounts = [
+  7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111,
+  43, 52, 99, 128, 111, 110, 98, 135, 112, 78, 118, 64, 77,
+  227, 93, 88, 69, 60, 34, 30, 73, 54, 45, 83, 182, 88, 75,
+  85, 54, 53, 89, 59, 37, 35, 38, 29, 18, 45, 60, 49, 62,
+  55, 78, 96, 29, 22, 24, 13, 14, 11, 11, 18, 12, 12, 30,
+  52, 52, 44, 28, 28, 20, 56, 40, 31, 50, 40, 46, 42, 29,
+  19, 36, 25, 22, 17, 19, 26, 30, 20, 15, 21, 11, 8, 8, 19,
+  5, 8, 8, 11, 11, 8, 3, 9, 5, 4, 7, 3, 6, 3, 5, 4, 5, 6,
 ];
+
+const surahs: Surah[] = surahNames.map((name, index) => ({
+  number: index + 1,
+  name,
+  verses: verseCounts[index],
+}));
+
+const juzs: Juz[] = Array.from({ length: 30 }, (_, index) => ({
+  number: index + 1,
+  name: `الجزء ${index + 1}`,
+}));
+
+const reciters: Reciter[] = [
+  {
+    id: "al-luhaidan",
+    name: "الشيخ محمد اللحيدان",
+    url: "https://server8.mp3quran.net/lhdan/001.mp3",
+  },
+  {
+    id: "yasser",
+    name: "الشيخ ياسر الدوسري",
+    url: "https://server11.mp3quran.net/yasser/001.mp3",
+  },
+  {
+    id: "abdulbasit",
+    name: "الشيخ عبد الباسط عبد الصمد",
+    url: "https://server7.mp3quran.net/basit/001.mp3",
+  },
+];
+
+function getSurahAudioUrl(
+  reciterId: string,
+  surahNumber: number
+): string {
+  const reciter = reciters.find(
+    (item) => item.id === reciterId
+  );
+
+  if (!reciter) {
+    return "";
+  }
+
+  const baseUrl = reciter.url.substring(
+    0,
+    reciter.url.lastIndexOf("/") + 1
+  );
+
+  return `${baseUrl}${String(surahNumber).padStart(3, "0")}.mp3`;
+}
+
+function formatDuration(milliseconds: number): string {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function ReaderModal({
+  target,
+  onClose,
+}: {
+  target: ReaderTarget | null;
+  onClose: () => void;
+}) {
+  const [ayahs, setAyahs] = useState<QuranAyah[]>([]);
+  const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!target) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAyahs = async () => {
+      setLoading(true);
+      setError("");
+      setAyahs([]);
+
+      try {
+        const endpoint =
+          target.type === "surah"
+            ? `https://api.alquran.cloud/v1/surah/${target.number}/quran-uthmani`
+            : `https://api.alquran.cloud/v1/juz/${target.number}/quran-uthmani`;
+
+        const response = await fetch(endpoint);
+
+        if (!response.ok) {
+          throw new Error("تعذر تحميل الآيات");
+        }
+
+        const result = (await response.json()) as QuranResponse;
+
+        if (!cancelled) {
+          setTitle(result.data?.name || target.title);
+          setAyahs(result.data?.ayahs || []);
+        }
+      } catch {
+        if (!cancelled) {
+          setError(
+            "تعذر تحميل النص حالياً. تحقق من اتصال الإنترنت."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadAyahs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
+
+  return (
+    <Modal
+      visible={Boolean(target)}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={styles.modalSafeArea}>
+        <View style={styles.modalHeader}>
+          <Pressable onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+
+          <Text style={styles.modalTitle}>{title || "القرآن الكريم"}</Text>
+
+          <View style={styles.headerSpacer} />
+        </View>
+
+        {loading ? (
+          <ActivityIndicator
+            color="#72efdd"
+            size="large"
+            style={styles.loader}
+          />
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.ayahContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {ayahs.map((ayah) => (
+              <View key={`${ayah.numberInSurah}-${ayah.text}`}>
+                <Text style={styles.ayahText}>
+                  {ayah.text}{" "}
+                  <Text style={styles.ayahNumber}>
+                    ﴿{ayah.numberInSurah}﴾
+                  </Text>
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function AudioModal({
+  target,
+  onClose,
+}: {
+  target: ReaderTarget | null;
+  onClose: () => void;
+}) {
+  const [selectedReciter, setSelectedReciter] = useState(
+    reciters[0].id
+  );
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(1);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, [sound]);
+
+  useEffect(() => {
+    setPosition(0);
+    setDuration(1);
+    setIsPlaying(false);
+  }, [target]);
+
+  const handleStatusUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) {
+      return;
+    }
+
+    setPosition(status.positionMillis);
+    setDuration(status.durationMillis || 1);
+    setIsPlaying(status.isPlaying);
+
+    if (status.didJustFinish && sound) {
+      sound.setPositionAsync(0).catch(() => undefined);
+      setIsPlaying(false);
+    }
+  };
+
+  const playSelectedReciter = async () => {
+    if (!target || target.type !== "surah") {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      const url = getSurahAudioUrl(
+        selectedReciter,
+        target.number
+      );
+
+      const result = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true },
+        handleStatusUpdate
+      );
+
+      setSound(result.sound);
+    } catch {
+      setIsPlaying(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePlay = async () => {
+    if (!sound) {
+      await playSelectedReciter();
+      return;
+    }
+
+    const status = await sound.getStatusAsync();
+
+    if (!status.isLoaded) {
+      return;
+    }
+
+    if (status.isPlaying) {
+      await sound.pauseAsync();
+    } else {
+      await sound.playAsync();
+    }
+  };
+
+  const closeAudio = async () => {
+    if (sound) {
+      await sound.unloadAsync();
+      setSound(null);
+    }
+
+    onClose();
+  };
+
+  const progressWidth = `${Math.min(
+    100,
+    Math.max(0, (position / duration) * 100)
+  )}%`;
+
+  return (
+    <Modal
+      visible={Boolean(target)}
+      animationType="slide"
+      onRequestClose={closeAudio}
+    >
+      <SafeAreaView style={styles.modalSafeArea}>
+        <View style={styles.modalHeader}>
+          <Pressable
+            onPress={closeAudio}
+            style={styles.closeButton}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+
+          <Text style={styles.modalTitle}>
+            استماع: {target?.title || ""}
+          </Text>
+
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <View style={styles.audioContainer}>
+          <View style={styles.audioIconCircle}>
+            <Text style={styles.audioIcon}>♫</Text>
+          </View>
+
+          <Text style={styles.audioTitle}>{target?.title}</Text>
+          <Text style={styles.audioSubtitle}>اختر القارئ</Text>
+
+          <View style={styles.reciterList}>
+            {reciters.map((reciter) => (
+              <Pressable
+                key={reciter.id}
+                onPress={() => setSelectedReciter(reciter.id)}
+                style={[
+                  styles.reciterButton,
+                  selectedReciter === reciter.id &&
+                    styles.selectedReciter,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.reciterText,
+                    selectedReciter === reciter.id &&
+                      styles.selectedReciterText,
+                  ]}
+                >
+                  {reciter.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: progressWidth },
+              ]}
+            />
+          </View>
+
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>
+              {formatDuration(position)}
+            </Text>
+            <Text style={styles.timeText}>
+              {formatDuration(duration)}
+            </Text>
+          </View>
+
+          <Pressable
+            disabled={loading}
+            onPress={togglePlay}
+            style={styles.playButton}
+          >
+            <Text style={styles.playButtonText}>
+              {loading ? "..." : isPlaying ? "إيقاف مؤقت" : "تشغيل"}
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
 
 export default function QuranTab() {
-  const [activeTab, setActiveTab] = useState<"surahs" | "juzs">(
-    "surahs"
-  );
-  const [bookmarkedSurah, setBookmarkedSurah] = useState<number | null>(
-    null
-  );
+  const [activeTab, setActiveTab] =
+    useState<ActiveTab>("surahs");
+  const [selectionVisible, setSelectionVisible] = useState(false);
+  const [selectedSurah, setSelectedSurah] =
+    useState<Surah | null>(null);
+  const [readerTarget, setReaderTarget] =
+    useState<ReaderTarget | null>(null);
+  const [audioTarget, setAudioTarget] =
+    useState<ReaderTarget | null>(null);
+  const [bookmarkedSurah, setBookmarkedSurah] = useState<
+    number | null
+  >(null);
+
+  const chooseSurah = (surah: Surah) => {
+    setSelectedSurah(surah);
+    setSelectionVisible(true);
+  };
+
+  const openReader = () => {
+    if (!selectedSurah) {
+      return;
+    }
+
+    setSelectionVisible(false);
+    setReaderTarget({
+      type: "surah",
+      number: selectedSurah.number,
+      title: selectedSurah.name,
+    });
+  };
+
+  const openAudio = () => {
+    if (!selectedSurah) {
+      return;
+    }
+
+    setSelectionVisible(false);
+    setAudioTarget({
+      type: "surah",
+      number: selectedSurah.number,
+      title: selectedSurah.name,
+    });
+  };
+
+  const openJuz = (juz: Juz) => {
+    setReaderTarget({
+      type: "juz",
+      number: juz.number,
+      title: juz.name,
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -186,20 +601,21 @@ export default function QuranTab() {
       >
         <View style={styles.header}>
           <Text style={styles.title}>القرآن الكريم</Text>
-          <Text style={styles.subtitle}>وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا</Text>
+          <Text style={styles.subtitle}>
+            وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا
+          </Text>
         </View>
 
         <View style={styles.lastReadCard}>
           <View>
             <Text style={styles.lastReadLabel}>آخر قراءة</Text>
             <Text style={styles.lastReadTitle}>سورة الكهف</Text>
-            <Text style={styles.lastReadSubtitle}>الآية 12 من 110</Text>
+            <Text style={styles.lastReadSubtitle}>
+              اختر سورة لبدء القراءة أو الاستماع
+            </Text>
           </View>
 
-          <View style={styles.continueButton}>
-            <Text style={styles.continueText}>متابعة</Text>
-            <Text style={styles.continueArrow}>←</Text>
-          </View>
+          <Text style={styles.quranSymbol}>۞</Text>
         </View>
 
         <View style={styles.tabs}>
@@ -241,22 +657,32 @@ export default function QuranTab() {
         <View style={styles.listCard}>
           {activeTab === "surahs"
             ? surahs.map((surah) => (
-                <View key={surah.id} style={styles.itemRow}>
+                <Pressable
+                  key={surah.number}
+                  onPress={() => chooseSurah(surah)}
+                  style={styles.itemRow}
+                >
                   <View style={styles.numberBox}>
-                    <Text style={styles.numberText}>{surah.id}</Text>
+                    <Text style={styles.numberText}>
+                      {surah.number}
+                    </Text>
                   </View>
 
                   <View style={styles.itemTextBox}>
-                    <Text style={styles.itemTitle}>{surah.name}</Text>
+                    <Text style={styles.itemTitle}>
+                      {surah.name}
+                    </Text>
                     <Text style={styles.itemSubtitle}>
-                      {surah.verses} آية
+                      {surah.verses} آية · قراءة واستماع
                     </Text>
                   </View>
 
                   <Pressable
                     onPress={() =>
                       setBookmarkedSurah(
-                        bookmarkedSurah === surah.id ? null : surah.id
+                        bookmarkedSurah === surah.number
+                          ? null
+                          : surah.number
                       )
                     }
                     style={styles.bookmarkButton}
@@ -264,35 +690,99 @@ export default function QuranTab() {
                     <Text
                       style={[
                         styles.bookmark,
-                        bookmarkedSurah === surah.id &&
+                        bookmarkedSurah === surah.number &&
                           styles.bookmarkActive,
                       ]}
                     >
-                      {bookmarkedSurah === surah.id ? "★" : "☆"}
+                      {bookmarkedSurah === surah.number
+                        ? "★"
+                        : "☆"}
                     </Text>
                   </Pressable>
-                </View>
+                </Pressable>
               ))
             : juzs.map((juz) => (
-                <View key={juz.id} style={styles.itemRow}>
+                <Pressable
+                  key={juz.number}
+                  onPress={() => openJuz(juz)}
+                  style={styles.itemRow}
+                >
                   <View style={styles.numberBox}>
-                    <Text style={styles.numberText}>{juz.id}</Text>
+                    <Text style={styles.numberText}>
+                      {juz.number}
+                    </Text>
                   </View>
 
                   <View style={styles.itemTextBox}>
-                    <Text style={styles.itemTitle}>{juz.name}</Text>
+                    <Text style={styles.itemTitle}>
+                      {juz.name}
+                    </Text>
                     <Text style={styles.itemSubtitle}>
-                      يبدأ من {juz.start}
+                      اضغط لقراءة آيات الجزء
                     </Text>
                   </View>
 
-                  <Pressable style={styles.bookmarkButton}>
-                    <Text style={styles.bookmark}>›</Text>
-                  </Pressable>
-                </View>
+                  <Text style={styles.juzArrow}>‹</Text>
+                </Pressable>
               ))}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={selectionVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectionVisible(false)}
+      >
+        <View style={styles.selectionOverlay}>
+          <View style={styles.selectionCard}>
+            <Text style={styles.selectionTitle}>
+              {selectedSurah?.name || "السورة"}
+            </Text>
+
+            <Text style={styles.selectionSubtitle}>
+              اختر طريقة المتابعة
+            </Text>
+
+            <Pressable
+              onPress={openReader}
+              style={styles.selectionButton}
+            >
+              <Text style={styles.selectionIcon}>📖</Text>
+              <Text style={styles.selectionButtonText}>
+                قراءة السورة
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={openAudio}
+              style={styles.selectionButton}
+            >
+              <Text style={styles.selectionIcon}>♫</Text>
+              <Text style={styles.selectionButtonText}>
+                استماع صوتي
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setSelectionVisible(false)}
+              style={styles.cancelButton}
+            >
+              <Text style={styles.cancelText}>إلغاء</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <ReaderModal
+        target={readerTarget}
+        onClose={() => setReaderTarget(null)}
+      />
+
+      <AudioModal
+        target={audioTarget}
+        onClose={() => setAudioTarget(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -350,24 +840,9 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: "right",
   },
-  continueButton: {
-    alignItems: "center",
-    backgroundColor: "#72efdd",
-    borderRadius: 12,
-    flexDirection: "row-reverse",
-    gap: 7,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-  },
-  continueText: {
-    color: "#102337",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  continueArrow: {
-    color: "#102337",
-    fontSize: 17,
-    fontWeight: "800",
+  quranSymbol: {
+    color: "#72efdd",
+    fontSize: 42,
   },
   tabs: {
     backgroundColor: "#121e35",
@@ -449,5 +924,207 @@ const styles = StyleSheet.create({
   bookmarkActive: {
     color: "#72efdd",
   },
+  juzArrow: {
+    color: "#72efdd",
+    fontSize: 28,
+  },
+  selectionOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 24,
+  },
+  selectionCard: {
+    backgroundColor: "#15243d",
+    borderColor: "#2b6e7d",
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 22,
+    width: "100%",
+  },
+  selectionTitle: {
+    color: "#ffffff",
+    fontSize: 23,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  selectionSubtitle: {
+    color: "#9caec2",
+    fontSize: 13,
+    marginBottom: 18,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  selectionButton: {
+    alignItems: "center",
+    backgroundColor: "#1d3d52",
+    borderRadius: 13,
+    flexDirection: "row-reverse",
+    marginTop: 10,
+    padding: 15,
+  },
+  selectionIcon: {
+    fontSize: 22,
+    marginLeft: 10,
+  },
+  selectionButtonText: {
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  cancelButton: {
+    alignItems: "center",
+    marginTop: 16,
+    padding: 10,
+  },
+  cancelText: {
+    color: "#a8b8ca",
+    fontSize: 14,
+  },
+  modalSafeArea: {
+    backgroundColor: "#0b1326",
+    flex: 1,
+  },
+  modalHeader: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  modalTitle: {
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  closeButton: {
+    alignItems: "center",
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  closeText: {
+    color: "#72efdd",
+    fontSize: 34,
+    fontWeight: "300",
+  },
+  headerSpacer: {
+    width: 42,
+  },
+  loader: {
+    marginTop: 60,
+  },
+  errorText: {
+    color: "#ffb4b4",
+    fontSize: 15,
+    margin: 30,
+    textAlign: "center",
+  },
+  ayahContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  ayahText: {
+    color: "#f4f0df",
+    fontSize: 24,
+    lineHeight: 48,
+    textAlign: "right",
+  },
+  ayahNumber: {
+    color: "#72efdd",
+    fontSize: 18,
+  },
+  audioContainer: {
+    alignItems: "center",
+    padding: 24,
+  },
+  audioIconCircle: {
+    alignItems: "center",
+    backgroundColor: "#183c52",
+    borderRadius: 55,
+    height: 110,
+    justifyContent: "center",
+    marginTop: 28,
+    width: 110,
+  },
+  audioIcon: {
+    color: "#72efdd",
+    fontSize: 54,
+  },
+  audioTitle: {
+    color: "#ffffff",
+    fontSize: 24,
+    fontWeight: "800",
+    marginTop: 22,
+  },
+  audioSubtitle: {
+    color: "#8fa1b7",
+    fontSize: 14,
+    marginTop: 6,
+  },
+  reciterList: {
+    width: "100%",
+  },
+  reciterButton: {
+    backgroundColor: "#15243d",
+    borderColor: "#2b3e5d",
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 11,
+    padding: 14,
+  },
+  selectedReciter: {
+    backgroundColor: "#244b57",
+    borderColor: "#72efdd",
+  },
+  reciterText: {
+    color: "#d8e2ed",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  selectedReciterText: {
+    color: "#72efdd",
+    fontWeight: "800",
+  },
+  progressTrack: {
+    backgroundColor: "#2a3a54",
+    borderRadius: 5,
+    height: 8,
+    marginTop: 30,
+    overflow: "hidden",
+    width: "100%",
+  },
+  progressFill: {
+    backgroundColor: "#72efdd",
+    borderRadius: 5,
+    height: "100%",
+  },
+  timeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    width: "100%",
+  },
+  timeText: {
+    color: "#8fa1b7",
+    fontSize: 12,
+  },
+  playButton: {
+    alignItems: "center",
+    backgroundColor: "#72efdd",
+    borderRadius: 14,
+    marginTop: 25,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+  },
+  playButtonText: {
+    color: "#102337",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });
-
