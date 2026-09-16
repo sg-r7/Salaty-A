@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,18 +8,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Location from "expo-location";
 import {
   CalculationMethod,
   Coordinates,
   Madhab,
   PrayerTimes,
 } from "adhan";
-import {
-  cancelAllNotifications,
-  registerForPushNotificationsAsync,
-  schedulePrayerNotification,
-} from "../../lib/notifications";
 
 interface PrayerRow {
   id: string;
@@ -28,15 +21,85 @@ interface PrayerRow {
   time: string;
   icon: string;
   isNightPrayer?: boolean;
-  date: Date;
+}
+
+const MECCA_LATITUDE = 21.4225;
+const MECCA_LONGITUDE = 39.8262;
+
+function createPrayerRows(): PrayerRow[] {
+  const coordinates = new Coordinates(
+    MECCA_LATITUDE,
+    MECCA_LONGITUDE
+  );
+
+  const parameters = CalculationMethod.UmmAlQura();
+  parameters.madhab = Madhab.Shafi;
+
+  const prayerTimes = new PrayerTimes(
+    coordinates,
+    new Date(),
+    parameters
+  );
+
+  const formatTime = (date: Date): string =>
+    date.toLocaleTimeString("ar-SA", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  return [
+    {
+      id: "fajr",
+      name: "الفجر",
+      time: formatTime(prayerTimes.fajr),
+      icon: "☀",
+    },
+    {
+      id: "sunrise",
+      name: "الشروق",
+      time: formatTime(prayerTimes.sunrise),
+      icon: "◒",
+    },
+    {
+      id: "dhuhr",
+      name: "الظهر",
+      time: formatTime(prayerTimes.dhuhr),
+      icon: "◉",
+    },
+    {
+      id: "asr",
+      name: "العصر",
+      time: formatTime(prayerTimes.asr),
+      icon: "◐",
+    },
+    {
+      id: "maghrib",
+      name: "المغرب",
+      time: formatTime(prayerTimes.maghrib),
+      icon: "☾",
+    },
+    {
+      id: "isha",
+      name: "العشاء",
+      time: formatTime(prayerTimes.isha),
+      icon: "☽",
+    },
+    {
+      id: "qiyam",
+      name: "قيام الليل",
+      time: "12:30 ص",
+      icon: "✦",
+      isNightPrayer: true,
+    },
+  ];
 }
 
 export default function PrayersTab() {
-  const [loading, setLoading] = useState(true);
-  const [locationTitle, setLocationTitle] = useState("الكرمة، الأنبار");
-  const [dateString, setDateString] = useState("");
-  const [prayerRows, setPrayerRows] = useState<PrayerRow[]>([]);
-  const [notifications, setNotifications] = useState<Record<string, boolean>>({
+  const prayerRows = useMemo(() => createPrayerRows(), []);
+
+  const [notifications, setNotifications] = useState<
+    Record<string, boolean>
+  >({
     fajr: true,
     dhuhr: true,
     asr: true,
@@ -45,157 +108,11 @@ export default function PrayersTab() {
     qiyam: false,
   });
 
-  const loadPrayerTimes = async () => {
-    setLoading(true);
-    try {
-      await registerForPushNotificationsAsync();
-
-      // التاريخ الحالي باللغة العربية
-      const now = new Date();
-      const formattedDate = now.toLocaleDateString("ar-IQ", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-      setDateString(formattedDate);
-
-      let latitude = 33.385;
-      let longitude = 43.91;
-
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        try {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          latitude = loc.coords.latitude;
-          longitude = loc.coords.longitude;
-
-          const reverseGeocode = await Location.reverseGeocodeAsync({
-            latitude,
-            longitude,
-          });
-
-          if (reverseGeocode.length > 0) {
-            const place = reverseGeocode[0];
-            const city =
-              place.district ||
-              place.city ||
-              place.subregion ||
-              "الأنبار";
-            setLocationTitle(`${city} (GPS)`);
-          }
-        } catch {
-          setLocationTitle("الكرمة، الأنبار (افتراضي)");
-        }
-      }
-
-      const coordinates = new Coordinates(latitude, longitude);
-      const params = CalculationMethod.MuslimWorldLeague();
-      params.madhab = Madhab.Shafi;
-      params.adjustments.fajr = 0;
-      params.adjustments.dhuhr = 1;
-      params.adjustments.maghrib = 2;
-
-      const prayerTimes = new PrayerTimes(coordinates, now, params);
-
-      const formatTime = (t: Date): string =>
-        t.toLocaleTimeString("ar-IQ", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-      // حساب وقت قيام الليل فلكياً (الثلث الأخير من الليل)
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowTimes = new PrayerTimes(coordinates, tomorrow, params);
-      const nightDuration =
-        tomorrowTimes.fajr.getTime() - prayerTimes.maghrib.getTime();
-      const qiyamDate = new Date(
-        tomorrowTimes.fajr.getTime() - nightDuration / 3
-      );
-
-      const rows: PrayerRow[] = [
-        {
-          id: "fajr",
-          name: "الفجر",
-          time: formatTime(prayerTimes.fajr),
-          icon: "☀",
-          date: prayerTimes.fajr,
-        },
-        {
-          id: "sunrise",
-          name: "الشروق",
-          time: formatTime(prayerTimes.sunrise),
-          icon: "◒",
-          date: prayerTimes.sunrise,
-        },
-        {
-          id: "dhuhr",
-          name: "الظهر",
-          time: formatTime(prayerTimes.dhuhr),
-          icon: "◉",
-          date: prayerTimes.dhuhr,
-        },
-        {
-          id: "asr",
-          name: "العصر",
-          time: formatTime(prayerTimes.asr),
-          icon: "◐",
-          date: prayerTimes.asr,
-        },
-        {
-          id: "maghrib",
-          name: "المغرب",
-          time: formatTime(prayerTimes.maghrib),
-          icon: "☾",
-          date: prayerTimes.maghrib,
-        },
-        {
-          id: "isha",
-          name: "العشاء",
-          time: formatTime(prayerTimes.isha),
-          icon: "☽",
-          date: prayerTimes.isha,
-        },
-        {
-          id: "qiyam",
-          name: "قيام الليل",
-          time: formatTime(qiyamDate),
-          icon: "✦",
-          isNightPrayer: true,
-          date: qiyamDate,
-        },
-      ];
-
-      setPrayerRows(rows);
-    } catch (error) {
-      console.error("Error loading prayers:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadPrayerTimes();
-  }, []);
-
-  const toggleNotification = async (id: string) => {
-    const updatedState = !notifications[id];
+  const toggleNotification = (id: string) => {
     setNotifications((current) => ({
       ...current,
-      [id]: updatedState,
+      [id]: !current[id],
     }));
-
-    // إعادة جدولة الإشعارات حسب حالة التبديل
-    await cancelAllNotifications();
-    for (const row of prayerRows) {
-      const isEnabled = row.id === id ? updatedState : notifications[row.id];
-      if (isEnabled && row.id !== "sunrise") {
-        await schedulePrayerNotification(row.name, row.date);
-      }
-    }
   };
 
   return (
@@ -206,94 +123,101 @@ export default function PrayersTab() {
       >
         <View style={styles.header}>
           <Text style={styles.title}>أوقات الصلاة</Text>
-          <Text style={styles.subtitle}>{dateString || "جاري التحميل..."}</Text>
+          <Text style={styles.subtitle}>
+            مكة المكرمة 🕋 · طريقة حساب أم القرى
+          </Text>
         </View>
 
         <View style={styles.locationCard}>
           <View style={styles.locationIconBox}>
-            <Text style={styles.locationIcon}>⌖</Text>
+            <Text style={styles.locationIcon}>🕋</Text>
           </View>
 
           <View style={styles.locationTextBox}>
-            <Text style={styles.locationTitle}>{locationTitle}</Text>
+            <Text style={styles.locationTitle}>
+              مكة المكرمة 🕋
+            </Text>
             <Text style={styles.locationSubtitle}>
-              مواقيت اليوم حسب موقعك الجغرافي
+              مواقيت اليوم حسب تقويم أم القرى
             </Text>
           </View>
 
-          <Pressable
-            style={styles.refreshButton}
-            onPress={loadPrayerTimes}
-            disabled={loading}
-          >
-            <Text style={styles.refreshText}>↻</Text>
-          </Pressable>
+          <Text style={styles.fixedText}>ثابت</Text>
         </View>
 
-        {loading ? (
-          <ActivityIndicator
-            size="large"
-            color="#72efdd"
-            style={{ marginVertical: 30 }}
-          />
-        ) : (
-          <View style={styles.listCard}>
-            {prayerRows.map((prayer, index) => (
-              <View
-                key={prayer.id}
-                style={[
-                  styles.prayerRow,
-                  prayer.isNightPrayer && styles.qiyamRow,
-                  index === prayerRows.length - 1 && styles.lastRow,
-                ]}
-              >
-                <View style={styles.prayerInfo}>
-                  <View
-                    style={[
-                      styles.prayerIconBox,
-                      prayer.isNightPrayer && styles.qiyamIconBox,
-                    ]}
-                  >
-                    <Text style={styles.prayerIcon}>{prayer.icon}</Text>
-                  </View>
-
-                  <View>
-                    <Text style={styles.prayerName}>{prayer.name}</Text>
-                    {prayer.isNightPrayer ? (
-                      <Text style={styles.prayerHint}>وقت مستحب</Text>
-                    ) : null}
-                  </View>
+        <View style={styles.listCard}>
+          {prayerRows.map((prayer, index) => (
+            <View
+              key={prayer.id}
+              style={[
+                styles.prayerRow,
+                prayer.isNightPrayer && styles.qiyamRow,
+                index === prayerRows.length - 1 &&
+                  styles.lastRow,
+              ]}
+            >
+              <View style={styles.prayerInfo}>
+                <View
+                  style={[
+                    styles.prayerIconBox,
+                    prayer.isNightPrayer &&
+                      styles.qiyamIconBox,
+                  ]}
+                >
+                  <Text style={styles.prayerIcon}>
+                    {prayer.icon}
+                  </Text>
                 </View>
 
-                <View style={styles.prayerActions}>
-                  <Text style={styles.prayerTime}>{prayer.time}</Text>
+                <View>
+                  <Text style={styles.prayerName}>
+                    {prayer.name}
+                  </Text>
 
-                  {prayer.id !== "sunrise" ? (
-                    <Switch
-                      value={Boolean(notifications[prayer.id])}
-                      onValueChange={() => toggleNotification(prayer.id)}
-                      trackColor={{
-                        false: "#35445d",
-                        true: "#327e82",
-                      }}
-                      thumbColor={
-                        notifications[prayer.id] ? "#72efdd" : "#a8b4c7"
-                      }
-                    />
-                  ) : (
-                    <View style={styles.emptySwitch} />
-                  )}
+                  {prayer.isNightPrayer ? (
+                    <Text style={styles.prayerHint}>
+                      وقت مستحب
+                    </Text>
+                  ) : null}
                 </View>
               </View>
-            ))}
-          </View>
-        )}
+
+              <View style={styles.prayerActions}>
+                <Text style={styles.prayerTime}>
+                  {prayer.time}
+                </Text>
+
+                {prayer.id !== "sunrise" ? (
+                  <Switch
+                    value={Boolean(notifications[prayer.id])}
+                    onValueChange={() =>
+                      toggleNotification(prayer.id)
+                    }
+                    trackColor={{
+                      false: "#35445d",
+                      true: "#327e82",
+                    }}
+                    thumbColor={
+                      notifications[prayer.id]
+                        ? "#72efdd"
+                        : "#a8b4c7"
+                    }
+                  />
+                ) : (
+                  <View style={styles.emptySwitch} />
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
 
         <View style={styles.infoCard}>
           <Text style={styles.infoIcon}>ⓘ</Text>
           <Text style={styles.infoText}>
-            يتم تحديث المواقيت تلقائياً حسب موقعك الجغرافي الدقيق وطريقة الحساب
-            المعتمدة.
+            تم تثبيت الموقع على مكة المكرمة بإحداثيات
+            {" "}
+            21.4225, 39.8262، وتستخدم المواقيت طريقة حساب أم
+            القرى.
           </Text>
         </View>
       </ScrollView>
@@ -320,7 +244,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   subtitle: {
-    color: "#8997ad",
+    color: "#72efdd",
     fontSize: 13,
     marginTop: 6,
     textAlign: "right",
@@ -344,8 +268,7 @@ const styles = StyleSheet.create({
     width: 43,
   },
   locationIcon: {
-    color: "#72efdd",
-    fontSize: 23,
+    fontSize: 22,
   },
   locationTextBox: {
     flex: 1,
@@ -363,15 +286,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "right",
   },
-  refreshButton: {
-    alignItems: "center",
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  refreshText: {
+  fixedText: {
     color: "#72efdd",
-    fontSize: 26,
+    fontSize: 11,
+    fontWeight: "800",
   },
   listCard: {
     backgroundColor: "#121e35",
@@ -461,4 +379,3 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
-
