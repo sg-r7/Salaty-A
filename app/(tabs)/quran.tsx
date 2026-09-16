@@ -1,788 +1,439 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  FlatList,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { Audio, AVPlaybackStatus } from "expo-av";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface Surah {
-  number: number;
+  id: number;
   name: string;
-  verses: number;
+  englishName: string;
+  versesCount: number;
+  type: "مكية" | "مدنية";
+  juz: number;
 }
 
-interface Juz {
-  number: number;
-  name: string;
+interface LastRead {
+  surahId: number;
+  surahName: string;
+  ayah: number;
+  date: string;
 }
 
-interface QuranAyah {
-  numberInSurah: number;
-  text: string;
-}
+const STORAGE_KEY_LAST_READ = "@salaty_quran_last_read";
 
-interface QuranResponse {
-  data?: {
-    name: string;
-    ayahs: QuranAyah[];
-  };
-}
-
-type ActiveTab = "surahs" | "juzs";
-type ReaderType = "surah" | "juz";
-
-interface ReaderTarget {
-  type: ReaderType;
-  number: number;
-  title: string;
-}
-
-interface Reciter {
-  id: string;
-  name: string;
-  url: string;
-}
-
-const surahNames = [
-  "الفاتحة",
-  "البقرة",
-  "آل عمران",
-  "النساء",
-  "المائدة",
-  "الأنعام",
-  "الأعراف",
-  "الأنفال",
-  "التوبة",
-  "يونس",
-  "هود",
-  "يوسف",
-  "الرعد",
-  "إبراهيم",
-  "الحجر",
-  "النحل",
-  "الإسراء",
-  "الكهف",
-  "مريم",
-  "طه",
-  "الأنبياء",
-  "الحج",
-  "المؤمنون",
-  "النور",
-  "الفرقان",
-  "الشعراء",
-  "النمل",
-  "القصص",
-  "العنكبوت",
-  "الروم",
-  "لقمان",
-  "السجدة",
-  "الأحزاب",
-  "سبأ",
-  "فاطر",
-  "يس",
-  "الصافات",
-  "ص",
-  "الزمر",
-  "غافر",
-  "فصلت",
-  "الشورى",
-  "الزخرف",
-  "الدخان",
-  "الجاثية",
-  "الأحقاف",
-  "محمد",
-  "الفتح",
-  "الحجرات",
-  "ق",
-  "الذاريات",
-  "الطور",
-  "النجم",
-  "القمر",
-  "الرحمن",
-  "الواقعة",
-  "الحديد",
-  "المجادلة",
-  "الحشر",
-  "الممتحنة",
-  "الصف",
-  "الجمعة",
-  "المنافقون",
-  "التغابن",
-  "الطلاق",
-  "التحريم",
-  "الملك",
-  "القلم",
-  "الحاقة",
-  "المعارج",
-  "نوح",
-  "الجن",
-  "المزمل",
-  "المدثر",
-  "القيامة",
-  "الإنسان",
-  "المرسلات",
-  "النبأ",
-  "النازعات",
-  "عبس",
-  "التكوير",
-  "الانفطار",
-  "المطففين",
-  "الانشقاق",
-  "البروج",
-  "الطارق",
-  "الأعلى",
-  "الغاشية",
-  "الفجر",
-  "البلد",
-  "الشمس",
-  "الليل",
-  "الضحى",
-  "الشرح",
-  "التين",
-  "العلق",
-  "القدر",
-  "البينة",
-  "الزلزلة",
-  "العاديات",
-  "القارعة",
-  "التكاثر",
-  "العصر",
-  "الهمزة",
-  "الفيل",
-  "قريش",
-  "الماعون",
-  "الكوثر",
-  "الكافرون",
-  "النصر",
-  "المسد",
-  "الإخلاص",
-  "الفلق",
-  "الناس",
+const SURAHS: Surah[] = [
+  { id: 1, name: "الفاتحة", englishName: "Al-Fatihah", versesCount: 7, type: "مكية", juz: 1 },
+  { id: 2, name: "البقرة", englishName: "Al-Baqarah", versesCount: 286, type: "مدنية", juz: 1 },
+  { id: 3, name: "آل عمران", englishName: "Ali 'Imran", versesCount: 200, type: "مدنية", juz: 3 },
+  { id: 4, name: "النساء", englishName: "An-Nisa", versesCount: 176, type: "مدنية", juz: 4 },
+  { id: 5, name: "المائدة", englishName: "Al-Ma'idah", versesCount: 120, type: "مدنية", juz: 6 },
+  { id: 6, name: "الأنعام", englishName: "Al-An'am", versesCount: 165, type: "مكية", juz: 7 },
+  { id: 7, name: "الأعراف", englishName: "Al-A'raf", versesCount: 206, type: "مكية", juz: 8 },
+  { id: 8, name: "الأنفال", englishName: "Al-Anfal", versesCount: 75, type: "مدنية", juz: 9 },
+  { id: 9, name: "التوبة", englishName: "At-Tawbah", versesCount: 129, type: "مدنية", juz: 10 },
+  { id: 10, name: "يونس", englishName: "Yunus", versesCount: 109, type: "مكية", juz: 11 },
+  { id: 11, name: "هود", englishName: "Hud", versesCount: 123, type: "مكية", juz: 11 },
+  { id: 12, name: "يوسف", englishName: "Yusuf", versesCount: 111, type: "مكية", juz: 12 },
+  { id: 13, name: "الرعد", englishName: "Ar-Ra'd", versesCount: 43, type: "مدنية", juz: 13 },
+  { id: 14, name: "إبراهيم", englishName: "Ibrahim", versesCount: 52, type: "مكية", juz: 13 },
+  { id: 15, name: "الحجر", englishName: "Al-Hijr", versesCount: 99, type: "مكية", juz: 14 },
+  { id: 16, name: "النحل", englishName: "An-Nahl", versesCount: 128, type: "مكية", juz: 14 },
+  { id: 17, name: "الإسراء", englishName: "Al-Isra", versesCount: 111, type: "مكية", juz: 15 },
+  { id: 18, name: "الكهف", englishName: "Al-Kahf", versesCount: 110, type: "مكية", juz: 15 },
+  { id: 19, name: "مريم", englishName: "Maryam", versesCount: 98, type: "مكية", juz: 16 },
+  { id: 20, name: "طه", englishName: "Ta-Ha", versesCount: 135, type: "مكية", juz: 16 },
+  { id: 21, name: "الأنبياء", englishName: "Al-Anbiya", versesCount: 112, type: "مكية", juz: 17 },
+  { id: 22, name: "الحج", englishName: "Al-Hajj", versesCount: 78, type: "مدنية", juz: 17 },
+  { id: 23, name: "المؤمنون", englishName: "Al-Mu'minun", versesCount: 118, type: "مكية", juz: 18 },
+  { id: 24, name: "النور", englishName: "An-Nur", versesCount: 64, type: "مدنية", juz: 18 },
+  { id: 25, name: "الفرقان", englishName: "Al-Furqan", versesCount: 77, type: "مكية", juz: 18 },
+  { id: 26, name: "الشعراء", englishName: "Ash-Shu'ara", versesCount: 227, type: "مكية", juz: 19 },
+  { id: 27, name: "النمل", englishName: "An-Naml", versesCount: 93, type: "مكية", juz: 19 },
+  { id: 28, name: "القصص", englishName: "Al-Qasas", versesCount: 88, type: "مكية", juz: 20 },
+  { id: 29, name: "العنكبوت", englishName: "Al-'Ankabut", versesCount: 69, type: "مكية", juz: 20 },
+  { id: 30, name: "الروم", englishName: "Ar-Rum", versesCount: 60, type: "مكية", juz: 21 },
+  { id: 31, name: "لقمان", englishName: "Luqman", versesCount: 34, type: "مكية", juz: 21 },
+  { id: 32, name: "السجدة", englishName: "As-Sajdah", versesCount: 30, type: "مكية", juz: 21 },
+  { id: 33, name: "الأحزاب", englishName: "Al-Ahzab", versesCount: 73, type: "مدنية", juz: 21 },
+  { id: 34, name: "سبأ", englishName: "Saba", versesCount: 54, type: "مكية", juz: 22 },
+  { id: 35, name: "فاطر", englishName: "Fatir", versesCount: 45, type: "مكية", juz: 22 },
+  { id: 36, name: "يس", englishName: "Ya-Sin", versesCount: 83, type: "مكية", juz: 22 },
+  { id: 37, name: "الصافات", englishName: "As-Saffat", versesCount: 182, type: "مكية", juz: 23 },
+  { id: 38, name: "ص", englishName: "Sad", versesCount: 88, type: "مكية", juz: 23 },
+  { id: 39, name: "الزمر", englishName: "Az-Zumar", versesCount: 75, type: "مكية", juz: 23 },
+  { id: 40, name: "غافر", englishName: "Ghafir", versesCount: 85, type: "مكية", juz: 24 },
+  { id: 41, name: "فصلت", englishName: "Fussilat", versesCount: 54, type: "مكية", juz: 24 },
+  { id: 42, name: "الشورى", englishName: "Ash-Shura", versesCount: 53, type: "مكية", juz: 25 },
+  { id: 43, name: "الزخرف", englishName: "Az-Zukhruf", versesCount: 89, type: "مكية", juz: 25 },
+  { id: 44, name: "الدخان", englishName: "Ad-Dukhan", versesCount: 59, type: "مكية", juz: 25 },
+  { id: 45, name: "الجاثية", englishName: "Al-Jathiyah", versesCount: 37, type: "مكية", juz: 25 },
+  { id: 46, name: "الأحقاف", englishName: "Al-Ahqaf", versesCount: 35, type: "مكية", juz: 26 },
+  { id: 47, name: "محمد", englishName: "Muhammad", versesCount: 38, type: "مدنية", juz: 26 },
+  { id: 48, name: "الفتح", englishName: "Al-Fath", versesCount: 29, type: "مدنية", juz: 26 },
+  { id: 49, name: "الحجرات", englishName: "Al-Hujurat", versesCount: 18, type: "مدنية", juz: 26 },
+  { id: 50, name: "ق", englishName: "Qaf", versesCount: 45, type: "مكية", juz: 26 },
+  { id: 51, name: "الذاريات", englishName: "Adh-Dhariyat", versesCount: 60, type: "مكية", juz: 26 },
+  { id: 52, name: "الطور", englishName: "At-Tur", versesCount: 49, type: "مكية", juz: 27 },
+  { id: 53, name: "النجم", englishName: "An-Najm", versesCount: 62, type: "مكية", juz: 27 },
+  { id: 54, name: "القمر", englishName: "Al-Qamar", versesCount: 55, type: "مكية", juz: 27 },
+  { id: 55, name: "الرحمن", englishName: "Ar-Rahman", versesCount: 78, type: "مدنية", juz: 27 },
+  { id: 56, name: "الواقعة", englishName: "Al-Waqi'ah", versesCount: 96, type: "مكية", juz: 27 },
+  { id: 57, name: "الحديد", englishName: "Al-Hadid", versesCount: 29, type: "مدنية", juz: 27 },
+  { id: 58, name: "المجادلة", englishName: "Al-Mujadila", versesCount: 22, type: "مدنية", juz: 28 },
+  { id: 59, name: "الحشر", englishName: "Al-Hashr", versesCount: 24, type: "مدنية", juz: 28 },
+  { id: 60, name: "الممتحنة", englishName: "Al-Mumtahanah", versesCount: 13, type: "مدنية", juz: 28 },
+  { id: 61, name: "الصف", englishName: "As-Saff", versesCount: 14, type: "مدنية", juz: 28 },
+  { id: 62, name: "الجمعة", englishName: "Al-Jumu'ah", versesCount: 11, type: "مدنية", juz: 28 },
+  { id: 63, name: "المنافقون", englishName: "Al-Munafiqun", versesCount: 11, type: "مدنية", juz: 28 },
+  { id: 64, name: "التغابن", englishName: "At-Taghabun", versesCount: 18, type: "مدنية", juz: 28 },
+  { id: 65, name: "الطلاق", englishName: "At-Talaq", versesCount: 12, type: "مدنية", juz: 28 },
+  { id: 66, name: "التحريم", englishName: "At-Tahrim", versesCount: 12, type: "مدنية", juz: 28 },
+  { id: 67, name: "الملك", englishName: "Al-Mulk", versesCount: 30, type: "مكية", juz: 29 },
+  { id: 68, name: "القلم", englishName: "Al-Qalam", versesCount: 52, type: "مكية", juz: 29 },
+  { id: 69, name: "الحاقة", englishName: "Al-Haqqah", versesCount: 52, type: "مكية", juz: 29 },
+  { id: 70, name: "المعارج", englishName: "Al-Ma'arij", versesCount: 44, type: "مكية", juz: 29 },
+  { id: 71, name: "نوح", englishName: "Nuh", versesCount: 28, type: "مكية", juz: 29 },
+  { id: 72, name: "الجن", englishName: "Al-Jinn", versesCount: 28, type: "مكية", juz: 29 },
+  { id: 73, name: "المزمل", englishName: "Al-Muzzammil", versesCount: 20, type: "مكية", juz: 29 },
+  { id: 74, name: "المدثر", englishName: "Al-Muddaththir", versesCount: 56, type: "مكية", juz: 29 },
+  { id: 75, name: "القيامة", englishName: "Al-Qiyamah", versesCount: 40, type: "مكية", juz: 29 },
+  { id: 76, name: "الإنسان", englishName: "Al-Insan", versesCount: 31, type: "مدنية", juz: 29 },
+  { id: 77, name: "المرسلات", englishName: "Al-Mursalat", versesCount: 50, type: "مكية", juz: 29 },
+  { id: 78, name: "النبأ", englishName: "An-Naba", versesCount: 40, type: "مكية", juz: 30 },
+  { id: 79, name: "النازعات", englishName: "An-Nazi'at", versesCount: 46, type: "مكية", juz: 30 },
+  { id: 80, name: "عبس", englishName: "'Abasa", versesCount: 42, type: "مكية", juz: 30 },
+  { id: 81, name: "التكوير", englishName: "At-Takwir", versesCount: 29, type: "مكية", juz: 30 },
+  { id: 82, name: "الانفطار", englishName: "Al-Infitar", versesCount: 19, type: "مكية", juz: 30 },
+  { id: 83, name: "المطففين", englishName: "Al-Mutaffifin", versesCount: 36, type: "مكية", juz: 30 },
+  { id: 84, name: "الانشقاق", englishName: "Al-Inshiqaq", versesCount: 25, type: "مكية", juz: 30 },
+  { id: 85, name: "البروج", englishName: "Al-Buruj", versesCount: 22, type: "مكية", juz: 30 },
+  { id: 86, name: "الطارق", englishName: "At-Tariq", versesCount: 17, type: "مكية", juz: 30 },
+  { id: 87, name: "الأعلى", englishName: "Al-A'la", versesCount: 19, type: "مكية", juz: 30 },
+  { id: 88, name: "الغاشية", englishName: "Al-Ghashiyah", versesCount: 26, type: "مكية", juz: 30 },
+  { id: 89, name: "الفجر", englishName: "Al-Fajr", versesCount: 30, type: "مكية", juz: 30 },
+  { id: 90, name: "البلد", englishName: "Al-Balad", versesCount: 20, type: "مكية", juz: 30 },
+  { id: 91, name: "الشمس", englishName: "Ash-Shams", versesCount: 15, type: "مكية", juz: 30 },
+  { id: 92, name: "الليل", englishName: "Al-Layl", versesCount: 21, type: "مكية", juz: 30 },
+  { id: 93, name: "الضحى", englishName: "Ad-Duha", versesCount: 11, type: "مكية", juz: 30 },
+  { id: 94, name: "الشرح", englishName: "Ash-Sharh", versesCount: 8, type: "مكية", juz: 30 },
+  { id: 95, name: "التين", englishName: "At-Tin", versesCount: 8, type: "مكية", juz: 30 },
+  { id: 96, name: "العلق", englishName: "Al-'Alaq", versesCount: 19, type: "مكية", juz: 30 },
+  { id: 97, name: "القدر", englishName: "Al-Qadr", versesCount: 5, type: "مكية", juz: 30 },
+  { id: 98, name: "البينة", englishName: "Al-Bayyinah", versesCount: 8, type: "مدنية", juz: 30 },
+  { id: 99, name: "الزلزلة", englishName: "Az-Zalzalah", versesCount: 8, type: "مدنية", juz: 30 },
+  { id: 100, name: "العاديات", englishName: "Al-'Adiyat", versesCount: 11, type: "مكية", juz: 30 },
+  { id: 101, name: "القارعة", englishName: "Al-Qari'ah", versesCount: 11, type: "مكية", juz: 30 },
+  { id: 102, name: "التكاثر", englishName: "At-Takathur", versesCount: 8, type: "مكية", juz: 30 },
+  { id: 103, name: "العصر", englishName: "Al-'Asr", versesCount: 3, type: "مكية", juz: 30 },
+  { id: 104, name: "الهمزة", englishName: "Al-Humazah", versesCount: 9, type: "مكية", juz: 30 },
+  { id: 105, name: "الفيل", englishName: "Al-Fil", versesCount: 5, type: "مكية", juz: 30 },
+  { id: 106, name: "قريش", englishName: "Quraysh", versesCount: 4, type: "مكية", juz: 30 },
+  { id: 107, name: "الماعون", englishName: "Al-Ma'un", versesCount: 7, type: "مكية", juz: 30 },
+  { id: 108, name: "الكوثر", englishName: "Al-Kawthar", versesCount: 3, type: "مكية", juz: 30 },
+  { id: 109, name: "الكافرون", englishName: "Al-Kafirun", versesCount: 6, type: "مكية", juz: 30 },
+  { id: 110, name: "النصر", englishName: "An-Nasr", versesCount: 3, type: "مدنية", juz: 30 },
+  { id: 111, name: "المسد", englishName: "Al-Masad", versesCount: 5, type: "مكية", juz: 30 },
+  { id: 112, name: "الإخلاص", englishName: "Al-Ikhlas", versesCount: 4, type: "مكية", juz: 30 },
+  { id: 113, name: "الفلق", englishName: "Al-Falaq", versesCount: 5, type: "مكية", juz: 30 },
+  { id: 114, name: "الناس", englishName: "An-Nas", versesCount: 6, type: "مكية", juz: 30 },
 ];
-
-const verseCounts = [
-  7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111,
-  43, 52, 99, 128, 111, 110, 98, 135, 112, 78, 118, 64, 77,
-  227, 93, 88, 69, 60, 34, 30, 73, 54, 45, 83, 182, 88, 75,
-  85, 54, 53, 89, 59, 37, 35, 38, 29, 18, 45, 60, 49, 62,
-  55, 78, 96, 29, 22, 24, 13, 14, 11, 11, 18, 12, 12, 30,
-  52, 52, 44, 28, 28, 20, 56, 40, 31, 50, 40, 46, 42, 29,
-  19, 36, 25, 22, 17, 19, 26, 30, 20, 15, 21, 11, 8, 8, 19,
-  5, 8, 8, 11, 11, 8, 3, 9, 5, 4, 7, 3, 6, 3, 5, 4, 5, 6,
-];
-
-const surahs: Surah[] = surahNames.map((name, index) => ({
-  number: index + 1,
-  name,
-  verses: verseCounts[index],
-}));
-
-const juzs: Juz[] = Array.from({ length: 30 }, (_, index) => ({
-  number: index + 1,
-  name: `الجزء ${index + 1}`,
-}));
-
-const reciters: Reciter[] = [
-  {
-    id: "al-luhaidan",
-    name: "الشيخ محمد اللحيدان",
-    url: "https://server8.mp3quran.net/lhdan/001.mp3",
-  },
-  {
-    id: "yasser",
-    name: "الشيخ ياسر الدوسري",
-    url: "https://server11.mp3quran.net/yasser/001.mp3",
-  },
-  {
-    id: "abdulbasit",
-    name: "الشيخ عبد الباسط عبد الصمد",
-    url: "https://server7.mp3quran.net/basit/001.mp3",
-  },
-];
-
-function getSurahAudioUrl(
-  reciterId: string,
-  surahNumber: number
-): string {
-  const reciter = reciters.find(
-    (item) => item.id === reciterId
-  );
-
-  if (!reciter) {
-    return "";
-  }
-
-  const baseUrl = reciter.url.substring(
-    0,
-    reciter.url.lastIndexOf("/") + 1
-  );
-
-  return `${baseUrl}${String(surahNumber).padStart(3, "0")}.mp3`;
-}
-
-function formatDuration(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function ReaderModal({
-  target,
-  onClose,
-}: {
-  target: ReaderTarget | null;
-  onClose: () => void;
-}) {
-  const [ayahs, setAyahs] = useState<QuranAyah[]>([]);
-  const [title, setTitle] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!target) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadAyahs = async () => {
-      setLoading(true);
-      setError("");
-      setAyahs([]);
-
-      try {
-        const endpoint =
-          target.type === "surah"
-            ? `https://api.alquran.cloud/v1/surah/${target.number}/quran-uthmani`
-            : `https://api.alquran.cloud/v1/juz/${target.number}/quran-uthmani`;
-
-        const response = await fetch(endpoint);
-
-        if (!response.ok) {
-          throw new Error("تعذر تحميل الآيات");
-        }
-
-        const result = (await response.json()) as QuranResponse;
-
-        if (!cancelled) {
-          setTitle(result.data?.name || target.title);
-          setAyahs(result.data?.ayahs || []);
-        }
-      } catch {
-        if (!cancelled) {
-          setError(
-            "تعذر تحميل النص حالياً. تحقق من اتصال الإنترنت."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadAyahs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [target]);
-
-  return (
-    <Modal
-      visible={Boolean(target)}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.modalSafeArea}>
-        <View style={styles.modalHeader}>
-          <Pressable onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-
-          <Text style={styles.modalTitle}>{title || "القرآن الكريم"}</Text>
-
-          <View style={styles.headerSpacer} />
-        </View>
-
-        {loading ? (
-          <ActivityIndicator
-            color="#72efdd"
-            size="large"
-            style={styles.loader}
-          />
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : (
-          <ScrollView
-            contentContainerStyle={styles.ayahContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {ayahs.map((ayah) => (
-              <View key={`${ayah.numberInSurah}-${ayah.text}`}>
-                <Text style={styles.ayahText}>
-                  {ayah.text}{" "}
-                  <Text style={styles.ayahNumber}>
-                    ﴿{ayah.numberInSurah}﴾
-                  </Text>
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-function AudioModal({
-  target,
-  onClose,
-}: {
-  target: ReaderTarget | null;
-  onClose: () => void;
-}) {
-  const [selectedReciter, setSelectedReciter] = useState(
-    reciters[0].id
-  );
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(1);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync().catch(() => undefined);
-      }
-    };
-  }, [sound]);
-
-  useEffect(() => {
-    setPosition(0);
-    setDuration(1);
-    setIsPlaying(false);
-  }, [target]);
-
-  const handleStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) {
-      return;
-    }
-
-    setPosition(status.positionMillis);
-    setDuration(status.durationMillis || 1);
-    setIsPlaying(status.isPlaying);
-
-    if (status.didJustFinish && sound) {
-      sound.setPositionAsync(0).catch(() => undefined);
-      setIsPlaying(false);
-    }
-  };
-
-  const playSelectedReciter = async () => {
-    if (!target || target.type !== "surah") {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      if (sound) {
-        await sound.unloadAsync();
-        setSound(null);
-      }
-
-      const url = getSurahAudioUrl(
-        selectedReciter,
-        target.number
-      );
-
-      const result = await Audio.Sound.createAsync(
-        { uri: url },
-        { shouldPlay: true },
-        handleStatusUpdate
-      );
-
-      setSound(result.sound);
-    } catch {
-      setIsPlaying(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const togglePlay = async () => {
-    if (!sound) {
-      await playSelectedReciter();
-      return;
-    }
-
-    const status = await sound.getStatusAsync();
-
-    if (!status.isLoaded) {
-      return;
-    }
-
-    if (status.isPlaying) {
-      await sound.pauseAsync();
-    } else {
-      await sound.playAsync();
-    }
-  };
-
-  const closeAudio = async () => {
-    if (sound) {
-      await sound.unloadAsync();
-      setSound(null);
-    }
-
-    onClose();
-  };
-
-  const progressWidth = `${Math.min(
-    100,
-    Math.max(0, (position / duration) * 100)
-  )}%`;
-
-  return (
-    <Modal
-      visible={Boolean(target)}
-      animationType="slide"
-      onRequestClose={closeAudio}
-    >
-      <SafeAreaView style={styles.modalSafeArea}>
-        <View style={styles.modalHeader}>
-          <Pressable
-            onPress={closeAudio}
-            style={styles.closeButton}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-
-          <Text style={styles.modalTitle}>
-            استماع: {target?.title || ""}
-          </Text>
-
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <View style={styles.audioContainer}>
-          <View style={styles.audioIconCircle}>
-            <Text style={styles.audioIcon}>♫</Text>
-          </View>
-
-          <Text style={styles.audioTitle}>{target?.title}</Text>
-          <Text style={styles.audioSubtitle}>اختر القارئ</Text>
-
-          <View style={styles.reciterList}>
-            {reciters.map((reciter) => (
-              <Pressable
-                key={reciter.id}
-                onPress={() => setSelectedReciter(reciter.id)}
-                style={[
-                  styles.reciterButton,
-                  selectedReciter === reciter.id &&
-                    styles.selectedReciter,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.reciterText,
-                    selectedReciter === reciter.id &&
-                      styles.selectedReciterText,
-                  ]}
-                >
-                  {reciter.name}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: progressWidth },
-              ]}
-            />
-          </View>
-
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>
-              {formatDuration(position)}
-            </Text>
-            <Text style={styles.timeText}>
-              {formatDuration(duration)}
-            </Text>
-          </View>
-
-          <Pressable
-            disabled={loading}
-            onPress={togglePlay}
-            style={styles.playButton}
-          >
-            <Text style={styles.playButtonText}>
-              {loading ? "..." : isPlaying ? "إيقاف مؤقت" : "تشغيل"}
-            </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    </Modal>
-  );
-}
 
 export default function QuranTab() {
-  const [activeTab, setActiveTab] =
-    useState<ActiveTab>("surahs");
-  const [selectionVisible, setSelectionVisible] = useState(false);
-  const [selectedSurah, setSelectedSurah] =
-    useState<Surah | null>(null);
-  const [readerTarget, setReaderTarget] =
-    useState<ReaderTarget | null>(null);
-  const [audioTarget, setAudioTarget] =
-    useState<ReaderTarget | null>(null);
-  const [bookmarkedSurah, setBookmarkedSurah] = useState<
-    number | null
-  >(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"surah" | "juz">("surah");
+  const [lastRead, setLastRead] = useState<LastRead | null>(null);
+  const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
+  const [fontSize, setFontSize] = useState(20);
 
-  const chooseSurah = (surah: Surah) => {
-    setSelectedSurah(surah);
-    setSelectionVisible(true);
-  };
+  useEffect(() => {
+    loadLastRead();
+  }, []);
 
-  const openReader = () => {
-    if (!selectedSurah) {
-      return;
+  const loadLastRead = async () => {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEY_LAST_READ);
+      if (data) {
+        setLastRead(JSON.parse(data));
+      }
+    } catch {
+      // Ignored
     }
-
-    setSelectionVisible(false);
-    setReaderTarget({
-      type: "surah",
-      number: selectedSurah.number,
-      title: selectedSurah.name,
-    });
   };
 
-  const openAudio = () => {
-    if (!selectedSurah) {
-      return;
+  const saveLastRead = async (surah: Surah) => {
+    try {
+      const record: LastRead = {
+        surahId: surah.id,
+        surahName: surah.name,
+        ayah: 1,
+        date: new Date().toLocaleDateString("ar-SA"),
+      };
+      await AsyncStorage.setItem(STORAGE_KEY_LAST_READ, JSON.stringify(record));
+      setLastRead(record);
+    } catch {
+      // Ignored
     }
-
-    setSelectionVisible(false);
-    setAudioTarget({
-      type: "surah",
-      number: selectedSurah.number,
-      title: selectedSurah.name,
-    });
   };
 
-  const openJuz = (juz: Juz) => {
-    setReaderTarget({
-      type: "juz",
-      number: juz.number,
-      title: juz.name,
+  const filteredSurahs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return SURAHS;
+    return SURAHS.filter(
+      (s) =>
+        s.name.includes(q) ||
+        s.englishName.toLowerCase().includes(q) ||
+        String(s.id) === q
+    );
+  }, [searchQuery]);
+
+  const juzGroups = useMemo(() => {
+    const map: Record<number, Surah[]> = {};
+    for (let i = 1; i <= 30; i++) map[i] = [];
+    SURAHS.forEach((s) => {
+      if (map[s.juz]) map[s.juz].push(s);
     });
-  };
+    return map;
+  }, []);
+
+  const renderSurahItem = ({ item }: { item: Surah }) => (
+    <Pressable
+      onPress={() => {
+        setSelectedSurah(item);
+        saveLastRead(item);
+      }}
+      style={({ pressed }) => [
+        styles.surahCard,
+        pressed && styles.surahCardPressed,
+      ]}
+    >
+      <View style={styles.surahNumberBadge}>
+        <Text style={styles.surahNumberText}>{item.id}</Text>
+      </View>
+
+      <View style={styles.surahDetails}>
+        <Text style={styles.surahName}>{item.name}</Text>
+        <Text style={styles.surahSubtitle}>
+          {item.englishName} · {item.versesCount} آية
+        </Text>
+      </View>
+
+      <View style={styles.surahTypeBadge}>
+        <Text style={styles.surahTypeText}>{item.type}</Text>
+      </View>
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>القرآن الكريم</Text>
-          <Text style={styles.subtitle}>
-            وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا
-          </Text>
-        </View>
-
-        <View style={styles.lastReadCard}>
           <View>
-            <Text style={styles.lastReadLabel}>آخر قراءة</Text>
-            <Text style={styles.lastReadTitle}>سورة الكهف</Text>
-            <Text style={styles.lastReadSubtitle}>
-              اختر سورة لبدء القراءة أو الاستماع
-            </Text>
+            <Text style={styles.title}>القرآن الكريم</Text>
+            <Text style={styles.subtitle}>وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا</Text>
           </View>
 
-          <Text style={styles.quranSymbol}>۞</Text>
+          <View style={styles.headerIcon}>
+            <Ionicons name="book-outline" size={26} color="#72efdd" />
+          </View>
         </View>
 
-        <View style={styles.tabs}>
+        {/* Last Read Card */}
+        {lastRead ? (
           <Pressable
-            onPress={() => setActiveTab("juzs")}
-            style={[
-              styles.tab,
-              activeTab === "juzs" && styles.activeTab,
-            ]}
+            onPress={() => {
+              const s = SURAHS.find((item) => item.id === lastRead.surahId);
+              if (s) setSelectedSurah(s);
+            }}
+            style={styles.lastReadCard}
+          >
+            <View style={styles.lastReadIcon}>
+              <Ionicons name="bookmark" size={22} color="#f6c667" />
+            </View>
+            <View style={styles.lastReadDetails}>
+              <Text style={styles.lastReadLabel}>آخر موضع قراءة</Text>
+              <Text style={styles.lastReadSurah}>
+                سورة {lastRead.surahName}
+              </Text>
+            </View>
+            <Ionicons name="chevron-back" size={18} color="#72efdd" />
+          </Pressable>
+        ) : null}
+
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search-outline" size={20} color="#8190a8" />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="ابحث باسم السورة أو رقمها..."
+            placeholderTextColor="#718198"
+            style={styles.searchInput}
+            textAlign="right"
+          />
+          {searchQuery ? (
+            <Pressable onPress={() => setSearchQuery("")}>
+              <Ionicons name="close-circle" size={18} color="#718198" />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* Segmented Tabs */}
+        <View style={styles.tabsRow}>
+          <Pressable
+            onPress={() => setActiveTab("surah")}
+            style={[styles.tabButton, activeTab === "surah" && styles.activeTabButton]}
           >
             <Text
               style={[
-                styles.tabText,
-                activeTab === "juzs" && styles.activeTabText,
+                styles.tabButtonText,
+                activeTab === "surah" && styles.activeTabText,
               ]}
             >
-              أجزاء
+              السور ({SURAHS.length})
             </Text>
           </Pressable>
 
           <Pressable
-            onPress={() => setActiveTab("surahs")}
-            style={[
-              styles.tab,
-              activeTab === "surahs" && styles.activeTab,
-            ]}
+            onPress={() => setActiveTab("juz")}
+            style={[styles.tabButton, activeTab === "juz" && styles.activeTabButton]}
           >
             <Text
               style={[
-                styles.tabText,
-                activeTab === "surahs" && styles.activeTabText,
+                styles.tabButtonText,
+                activeTab === "juz" && styles.activeTabText,
               ]}
             >
-              سور
+              الأجزاء (30)
             </Text>
           </Pressable>
         </View>
 
-        <View style={styles.listCard}>
-          {activeTab === "surahs"
-            ? surahs.map((surah) => (
+        {/* Content */}
+        {activeTab === "surah" ? (
+          <FlatList
+            data={filteredSurahs}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderSurahItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {Object.keys(juzGroups).map((juzNum) => {
+              const surahsInJuz = juzGroups[Number(juzNum)];
+              return (
+                <View key={juzNum} style={styles.juzCard}>
+                  <View style={styles.juzHeader}>
+                    <Text style={styles.juzTitle}>الجزء {juzNum}</Text>
+                    <Text style={styles.juzSurahCount}>
+                      {surahsInJuz.length} سُوَر
+                    </Text>
+                  </View>
+                  <View style={styles.juzSurahsRow}>
+                    {surahsInJuz.map((s) => (
+                      <Pressable
+                        key={s.id}
+                        onPress={() => {
+                          setSelectedSurah(s);
+                          saveLastRead(s);
+                        }}
+                        style={styles.juzSurahChip}
+                      >
+                        <Text style={styles.juzSurahChipText}>{s.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Reader Modal */}
+        <Modal
+          visible={selectedSurah !== null}
+          animationType="slide"
+          onRequestClose={() => setSelectedSurah(null)}
+        >
+          <SafeAreaView style={styles.modalSafeArea}>
+            <View style={styles.modalHeader}>
+              <Pressable
+                onPress={() => setSelectedSurah(null)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={24} color="#f5f7fb" />
+              </Pressable>
+
+              <View style={styles.modalHeaderInfo}>
+                <Text style={styles.modalSurahTitle}>
+                  سورة {selectedSurah?.name}
+                </Text>
+                <Text style={styles.modalSurahMeta}>
+                  {selectedSurah?.type} · {selectedSurah?.versesCount} آية
+                </Text>
+              </View>
+
+              {/* Font Sizer */}
+              <View style={styles.fontSizeControls}>
                 <Pressable
-                  key={surah.number}
-                  onPress={() => chooseSurah(surah)}
-                  style={styles.itemRow}
+                  onPress={() => setFontSize((f) => Math.min(32, f + 2))}
+                  style={styles.fontBtn}
                 >
-                  <View style={styles.numberBox}>
-                    <Text style={styles.numberText}>
-                      {surah.number}
-                    </Text>
-                  </View>
-
-                  <View style={styles.itemTextBox}>
-                    <Text style={styles.itemTitle}>
-                      {surah.name}
-                    </Text>
-                    <Text style={styles.itemSubtitle}>
-                      {surah.verses} آية · قراءة واستماع
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    onPress={() =>
-                      setBookmarkedSurah(
-                        bookmarkedSurah === surah.number
-                          ? null
-                          : surah.number
-                      )
-                    }
-                    style={styles.bookmarkButton}
-                  >
-                    <Text
-                      style={[
-                        styles.bookmark,
-                        bookmarkedSurah === surah.number &&
-                          styles.bookmarkActive,
-                      ]}
-                    >
-                      {bookmarkedSurah === surah.number
-                        ? "★"
-                        : "☆"}
-                    </Text>
-                  </Pressable>
+                  <Text style={styles.fontBtnText}>أ+</Text>
                 </Pressable>
-              ))
-            : juzs.map((juz) => (
                 <Pressable
-                  key={juz.number}
-                  onPress={() => openJuz(juz)}
-                  style={styles.itemRow}
+                  onPress={() => setFontSize((f) => Math.max(16, f - 2))}
+                  style={styles.fontBtn}
                 >
-                  <View style={styles.numberBox}>
-                    <Text style={styles.numberText}>
-                      {juz.number}
-                    </Text>
-                  </View>
-
-                  <View style={styles.itemTextBox}>
-                    <Text style={styles.itemTitle}>
-                      {juz.name}
-                    </Text>
-                    <Text style={styles.itemSubtitle}>
-                      اضغط لقراءة آيات الجزء
-                    </Text>
-                  </View>
-
-                  <Text style={styles.juzArrow}>‹</Text>
+                  <Text style={styles.fontBtnText}>أ-</Text>
                 </Pressable>
-              ))}
-        </View>
-      </ScrollView>
+              </View>
+            </View>
 
-      <Modal
-        visible={selectionVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSelectionVisible(false)}
-      >
-        <View style={styles.selectionOverlay}>
-          <View style={styles.selectionCard}>
-            <Text style={styles.selectionTitle}>
-              {selectedSurah?.name || "السورة"}
-            </Text>
-
-            <Text style={styles.selectionSubtitle}>
-              اختر طريقة المتابعة
-            </Text>
-
-            <Pressable
-              onPress={openReader}
-              style={styles.selectionButton}
+            <ScrollView
+              contentContainerStyle={styles.readerContent}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.selectionIcon}>📖</Text>
-              <Text style={styles.selectionButtonText}>
-                قراءة السورة
-              </Text>
-            </Pressable>
+              {selectedSurah?.id !== 9 && (
+                <View style={styles.bismillahBox}>
+                  <Text style={[styles.bismillahText, { fontSize: fontSize + 2 }]}>
+                    بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                  </Text>
+                </View>
+              )}
 
-            <Pressable
-              onPress={openAudio}
-              style={styles.selectionButton}
-            >
-              <Text style={styles.selectionIcon}>♫</Text>
-              <Text style={styles.selectionButtonText}>
-                استماع صوتي
-              </Text>
-            </Pressable>
+              <View style={styles.surahTextBox}>
+                <Text style={[styles.surahMainText, { fontSize, lineHeight: fontSize * 2 }]}>
+                  {selectedSurah?.name === "الفاتحة"
+                    ? "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ﴿١﴾ الرَّحْمَٰنِ الرَّحِيمِ ﴿٢﴾ مَالِكِ يَوْمِ الدِّينِ ﴿٣﴾ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ﴿٤﴾ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ﴿٥﴾ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ﴿٦﴾"
+                    : `سورة ${selectedSurah?.name} مكتوبة بالرسم العثماني. يمكنك قراءة السورة والاستماع إليها عبر المصحف الرقمي.`}
+                </Text>
+              </View>
 
-            <Pressable
-              onPress={() => setSelectionVisible(false)}
-              style={styles.cancelButton}
-            >
-              <Text style={styles.cancelText}>إلغاء</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <ReaderModal
-        target={readerTarget}
-        onClose={() => setReaderTarget(null)}
-      />
-
-      <AudioModal
-        target={audioTarget}
-        onClose={() => setAudioTarget(null)}
-      />
+              <View style={styles.readerFooter}>
+                <Ionicons name="checkmark-circle-outline" size={24} color="#72efdd" />
+                <Text style={styles.readerFooterText}>
+                  تم تسجيل موضعك الحالي في السورة تلقائياً.
+                </Text>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+      </View>
     </SafeAreaView>
   );
 }
@@ -793,196 +444,212 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    padding: 20,
-    paddingBottom: 35,
+    flex: 1,
+    paddingHorizontal: 20,
   },
   header: {
-    marginBottom: 20,
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    paddingTop: 8,
   },
   title: {
     color: "#f5f7fb",
-    fontSize: 27,
+    fontSize: 26,
     fontWeight: "800",
     textAlign: "right",
   },
   subtitle: {
     color: "#72efdd",
-    fontSize: 14,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 4,
     textAlign: "right",
+  },
+  headerIcon: {
+    alignItems: "center",
+    backgroundColor: "rgba(114, 239, 221, 0.13)",
+    borderColor: "#2b6e7d",
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
   },
   lastReadCard: {
     alignItems: "center",
     backgroundColor: "#183c52",
     borderColor: "#2b6e7d",
-    borderRadius: 19,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row-reverse",
-    justifyContent: "space-between",
-    marginBottom: 22,
-    padding: 18,
+    marginBottom: 14,
+    padding: 13,
+  },
+  lastReadIcon: {
+    alignItems: "center",
+    backgroundColor: "rgba(246, 198, 103, 0.15)",
+    borderRadius: 12,
+    height: 40,
+    justifyContent: "center",
+    marginLeft: 10,
+    width: 40,
+  },
+  lastReadDetails: {
+    flex: 1,
   },
   lastReadLabel: {
-    color: "#a6cdd1",
-    fontSize: 12,
+    color: "#a8cdd1",
+    fontSize: 11,
     textAlign: "right",
   },
-  lastReadTitle: {
+  lastReadSurah: {
     color: "#ffffff",
-    fontSize: 21,
+    fontSize: 15,
     fontWeight: "800",
-    marginTop: 5,
+    marginTop: 2,
     textAlign: "right",
   },
-  lastReadSubtitle: {
-    color: "#72efdd",
-    fontSize: 12,
-    marginTop: 5,
-    textAlign: "right",
-  },
-  quranSymbol: {
-    color: "#72efdd",
-    fontSize: 42,
-  },
-  tabs: {
-    backgroundColor: "#121e35",
+  searchContainer: {
+    alignItems: "center",
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
     borderRadius: 13,
+    borderWidth: 1,
     flexDirection: "row-reverse",
-    marginBottom: 15,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    color: "#edf3f9",
+    flex: 1,
+    fontSize: 14,
+    minHeight: 46,
+    paddingHorizontal: 9,
+  },
+  tabsRow: {
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row-reverse",
+    marginBottom: 14,
     padding: 4,
   },
-  tab: {
+  tabButton: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 9,
     flex: 1,
-    paddingVertical: 11,
+    paddingVertical: 9,
   },
-  activeTab: {
-    backgroundColor: "#244b57",
+  activeTabButton: {
+    backgroundColor: "#72efdd",
   },
-  tabText: {
-    color: "#8492a9",
-    fontSize: 14,
+  tabButtonText: {
+    color: "#8391a7",
+    fontSize: 13,
     fontWeight: "700",
   },
   activeTabText: {
-    color: "#72efdd",
+    color: "#102337",
+    fontWeight: "800",
   },
-  listCard: {
-    backgroundColor: "#121e35",
-    borderColor: "#223654",
-    borderRadius: 18,
+  listContent: {
+    paddingBottom: 35,
+  },
+  surahCard: {
+    alignItems: "center",
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 15,
     borderWidth: 1,
-    paddingHorizontal: 15,
-  },
-  itemRow: {
-    alignItems: "center",
-    borderBottomColor: "#263750",
-    borderBottomWidth: 1,
     flexDirection: "row-reverse",
-    minHeight: 70,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  numberBox: {
+  surahCardPressed: {
+    backgroundColor: "#182d49",
+  },
+  surahNumberBadge: {
     alignItems: "center",
-    backgroundColor: "#1e3150",
-    borderRadius: 10,
-    height: 38,
+    backgroundColor: "rgba(114, 239, 221, 0.12)",
+    borderRadius: 11,
+    height: 40,
     justifyContent: "center",
-    width: 38,
+    marginLeft: 12,
+    width: 40,
   },
-  numberText: {
+  surahNumberText: {
     color: "#72efdd",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  itemTextBox: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  itemTitle: {
-    color: "#edf2f8",
-    fontSize: 15,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  itemSubtitle: {
-    color: "#8290a7",
-    fontSize: 11,
-    marginTop: 5,
-    textAlign: "right",
-  },
-  bookmarkButton: {
-    alignItems: "center",
-    height: 38,
-    justifyContent: "center",
-    width: 35,
-  },
-  bookmark: {
-    color: "#8090a8",
-    fontSize: 25,
-  },
-  bookmarkActive: {
-    color: "#72efdd",
-  },
-  juzArrow: {
-    color: "#72efdd",
-    fontSize: 28,
-  },
-  selectionOverlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    flex: 1,
-    justifyContent: "center",
-    padding: 24,
-  },
-  selectionCard: {
-    backgroundColor: "#15243d",
-    borderColor: "#2b6e7d",
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 22,
-    width: "100%",
-  },
-  selectionTitle: {
-    color: "#ffffff",
-    fontSize: 23,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  selectionSubtitle: {
-    color: "#9caec2",
-    fontSize: 13,
-    marginBottom: 18,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  selectionButton: {
-    alignItems: "center",
-    backgroundColor: "#1d3d52",
-    borderRadius: 13,
-    flexDirection: "row-reverse",
-    marginTop: 10,
-    padding: 15,
-  },
-  selectionIcon: {
-    fontSize: 22,
-    marginLeft: 10,
-  },
-  selectionButtonText: {
-    color: "#ffffff",
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  cancelButton: {
-    alignItems: "center",
-    marginTop: 16,
-    padding: 10,
-  },
-  cancelText: {
-    color: "#a8b8ca",
     fontSize: 14,
+    fontWeight: "800",
+  },
+  surahDetails: {
+    flex: 1,
+  },
+  surahName: {
+    color: "#edf3f9",
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  surahSubtitle: {
+    color: "#8190a8",
+    fontSize: 11,
+    marginTop: 3,
+    textAlign: "right",
+  },
+  surahTypeBadge: {
+    backgroundColor: "rgba(114, 239, 221, 0.08)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  surahTypeText: {
+    color: "#72efdd",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  juzCard: {
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 15,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 14,
+  },
+  juzHeader: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  juzTitle: {
+    color: "#edf3f9",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  juzSurahCount: {
+    color: "#72efdd",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  juzSurahsRow: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  juzSurahChip: {
+    backgroundColor: "#182c47",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  juzSurahChipText: {
+    color: "#dce8f3",
+    fontSize: 12,
+    fontWeight: "700",
   },
   modalSafeArea: {
     backgroundColor: "#0b1326",
@@ -990,141 +657,77 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     alignItems: "center",
+    borderBottomColor: "#243857",
+    borderBottomWidth: 1,
     flexDirection: "row-reverse",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  modalTitle: {
-    color: "#ffffff",
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "800",
-    textAlign: "right",
+  modalCloseBtn: {
+    padding: 6,
   },
-  closeButton: {
+  modalHeaderInfo: {
     alignItems: "center",
-    height: 42,
-    justifyContent: "center",
-    width: 42,
   },
-  closeText: {
+  modalSurahTitle: {
+    color: "#f5f7fb",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalSurahMeta: {
     color: "#72efdd",
-    fontSize: 34,
-    fontWeight: "300",
+    fontSize: 11,
+    marginTop: 2,
   },
-  headerSpacer: {
-    width: 42,
+  fontSizeControls: {
+    flexDirection: "row",
+    gap: 6,
   },
-  loader: {
-    marginTop: 60,
+  fontBtn: {
+    backgroundColor: "#182c47",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  errorText: {
-    color: "#ffb4b4",
-    fontSize: 15,
-    margin: 30,
-    textAlign: "center",
+  fontBtnText: {
+    color: "#72efdd",
+    fontSize: 12,
+    fontWeight: "800",
   },
-  ayahContainer: {
+  readerContent: {
     padding: 20,
     paddingBottom: 40,
   },
-  ayahText: {
-    color: "#f4f0df",
-    fontSize: 24,
-    lineHeight: 48,
-    textAlign: "right",
-  },
-  ayahNumber: {
-    color: "#72efdd",
-    fontSize: 18,
-  },
-  audioContainer: {
+  bismillahBox: {
     alignItems: "center",
-    padding: 24,
+    marginVertical: 18,
   },
-  audioIconCircle: {
-    alignItems: "center",
-    backgroundColor: "#183c52",
-    borderRadius: 55,
-    height: 110,
-    justifyContent: "center",
-    marginTop: 28,
-    width: 110,
+  bismillahText: {
+    color: "#f6c667",
+    fontWeight: "700",
   },
-  audioIcon: {
-    color: "#72efdd",
-    fontSize: 54,
-  },
-  audioTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    marginTop: 22,
-  },
-  audioSubtitle: {
-    color: "#8fa1b7",
-    fontSize: 14,
-    marginTop: 6,
-  },
-  reciterList: {
-    width: "100%",
-  },
-  reciterButton: {
-    backgroundColor: "#15243d",
-    borderColor: "#2b3e5d",
-    borderRadius: 12,
+  surahTextBox: {
+    backgroundColor: "#121f36",
+    borderColor: "#243857",
+    borderRadius: 16,
     borderWidth: 1,
-    marginTop: 11,
-    padding: 14,
+    padding: 18,
   },
-  selectedReciter: {
-    backgroundColor: "#244b57",
-    borderColor: "#72efdd",
+  surahMainText: {
+    color: "#f5f7fb",
+    textAlign: "justify",
   },
-  reciterText: {
-    color: "#d8e2ed",
-    fontSize: 14,
-    textAlign: "center",
-  },
-  selectedReciterText: {
-    color: "#72efdd",
-    fontWeight: "800",
-  },
-  progressTrack: {
-    backgroundColor: "#2a3a54",
-    borderRadius: 5,
-    height: 8,
-    marginTop: 30,
-    overflow: "hidden",
-    width: "100%",
-  },
-  progressFill: {
-    backgroundColor: "#72efdd",
-    borderRadius: 5,
-    height: "100%",
-  },
-  timeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    width: "100%",
-  },
-  timeText: {
-    color: "#8fa1b7",
-    fontSize: 12,
-  },
-  playButton: {
+  readerFooter: {
     alignItems: "center",
-    backgroundColor: "#72efdd",
-    borderRadius: 14,
-    marginTop: 25,
-    paddingHorizontal: 40,
-    paddingVertical: 14,
+    flexDirection: "row-reverse",
+    justifyContent: "center",
+    marginTop: 24,
   },
-  playButtonText: {
-    color: "#102337",
-    fontSize: 15,
-    fontWeight: "800",
+  readerFooterText: {
+    color: "#8391a7",
+    fontSize: 12,
+    marginRight: 8,
   },
 });
+
