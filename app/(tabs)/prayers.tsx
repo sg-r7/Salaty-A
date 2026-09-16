@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,6 +13,10 @@ import {
   Madhab,
   PrayerTimes,
 } from "adhan";
+import {
+  CalculationMethodName,
+  usePrayer,
+} from "../../src/context/PrayerContext";
 
 interface PrayerRow {
   id: string;
@@ -23,83 +26,103 @@ interface PrayerRow {
   isNightPrayer?: boolean;
 }
 
-const MECCA_LATITUDE = 21.4225;
-const MECCA_LONGITUDE = 39.8262;
+function getCalculationParameters(method: CalculationMethodName) {
+  switch (method) {
+    case "muslimWorldLeague":
+      return CalculationMethod.MuslimWorldLeague();
+    case "egyptian":
+      return CalculationMethod.Egyptian();
+    case "karachi":
+      return CalculationMethod.Karachi();
+    case "ummAlQura":
+    default:
+      return CalculationMethod.UmmAlQura();
+  }
+}
 
-function createPrayerRows(): PrayerRow[] {
-  const coordinates = new Coordinates(
-    MECCA_LATITUDE,
-    MECCA_LONGITUDE
-  );
-
-  const parameters = CalculationMethod.UmmAlQura();
-  parameters.madhab = Madhab.Shafi;
-
-  const prayerTimes = new PrayerTimes(
-    coordinates,
-    new Date(),
-    parameters
-  );
-
-  const formatTime = (date: Date): string =>
-    date.toLocaleTimeString("ar-SA", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-  return [
-    {
-      id: "fajr",
-      name: "الفجر",
-      time: formatTime(prayerTimes.fajr),
-      icon: "☀",
-    },
-    {
-      id: "sunrise",
-      name: "الشروق",
-      time: formatTime(prayerTimes.sunrise),
-      icon: "◒",
-    },
-    {
-      id: "dhuhr",
-      name: "الظهر",
-      time: formatTime(prayerTimes.dhuhr),
-      icon: "◉",
-    },
-    {
-      id: "asr",
-      name: "العصر",
-      time: formatTime(prayerTimes.asr),
-      icon: "◐",
-    },
-    {
-      id: "maghrib",
-      name: "المغرب",
-      time: formatTime(prayerTimes.maghrib),
-      icon: "☾",
-    },
-    {
-      id: "isha",
-      name: "العشاء",
-      time: formatTime(prayerTimes.isha),
-      icon: "☽",
-    },
-    {
-      id: "qiyam",
-      name: "قيام الليل",
-      time: "12:30 ص",
-      icon: "✦",
-      isNightPrayer: true,
-    },
-  ];
+function getMethodArabicName(method: CalculationMethodName): string {
+  switch (method) {
+    case "muslimWorldLeague":
+      return "رابطة العالم الإسلامي";
+    case "egyptian":
+      return "الهيئة المصرية العامة للمساحة";
+    case "karachi":
+      return "جامعة كراتشي";
+    case "ummAlQura":
+    default:
+      return "تقويم أم القرى";
+  }
 }
 
 export default function PrayersTab() {
-  const prayerRows = useMemo(() => createPrayerRows(), []);
+  const { location, calculationMethod, asrMadhab } = usePrayer();
 
-  const [notifications, setNotifications] = useState<
-    Record<string, boolean>
-  >({
+  const prayerRows = useMemo(() => {
+    const lat = location?.latitude ?? 21.4225;
+    const lng = location?.longitude ?? 39.8262;
+
+    const coordinates = new Coordinates(lat, lng);
+    const parameters = getCalculationParameters(calculationMethod);
+    parameters.madhab = asrMadhab === "hanafi" ? Madhab.Hanafi : Madhab.Shafi;
+
+    const prayerTimes = new PrayerTimes(coordinates, new Date(), parameters);
+
+    const formatTime = (date: Date): string => {
+      if (!date || isNaN(date.getTime())) return "--:--";
+      return date.toLocaleTimeString("ar-SA", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
+    return [
+      {
+        id: "fajr",
+        name: "الفجر",
+        time: formatTime(prayerTimes.fajr),
+        icon: "☀",
+      },
+      {
+        id: "sunrise",
+        name: "الشروق",
+        time: formatTime(prayerTimes.sunrise),
+        icon: "◒",
+      },
+      {
+        id: "dhuhr",
+        name: "الظهر",
+        time: formatTime(prayerTimes.dhuhr),
+        icon: "◉",
+      },
+      {
+        id: "asr",
+        name: "العصر",
+        time: formatTime(prayerTimes.asr),
+        icon: "◐",
+      },
+      {
+        id: "maghrib",
+        name: "المغرب",
+        time: formatTime(prayerTimes.maghrib),
+        icon: "☾",
+      },
+      {
+        id: "isha",
+        name: "العشاء",
+        time: formatTime(prayerTimes.isha),
+        icon: "☽",
+      },
+      {
+        id: "qiyam",
+        name: "قيام الليل",
+        time: "12:30 ص",
+        icon: "✦",
+        isNightPrayer: true,
+      },
+    ];
+  }, [location, calculationMethod, asrMadhab]);
+
+  const [notifications, setNotifications] = useState<Record<string, boolean>>({
     fajr: true,
     dhuhr: true,
     asr: true,
@@ -115,6 +138,9 @@ export default function PrayersTab() {
     }));
   };
 
+  const cityName = location?.city || "مكة المكرمة";
+  const methodName = getMethodArabicName(calculationMethod);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -124,25 +150,27 @@ export default function PrayersTab() {
         <View style={styles.header}>
           <Text style={styles.title}>أوقات الصلاة</Text>
           <Text style={styles.subtitle}>
-            مكة المكرمة 🕋 · طريقة حساب أم القرى
+            {cityName} · طريقة حساب {methodName}
           </Text>
         </View>
 
         <View style={styles.locationCard}>
           <View style={styles.locationIconBox}>
-            <Text style={styles.locationIcon}>🕋</Text>
+            <Text style={styles.locationIcon}>
+              {location?.source === "gps" ? "📍" : "🏙️"}
+            </Text>
           </View>
 
           <View style={styles.locationTextBox}>
-            <Text style={styles.locationTitle}>
-              مكة المكرمة 🕋
-            </Text>
+            <Text style={styles.locationTitle}>{cityName}</Text>
             <Text style={styles.locationSubtitle}>
-              مواقيت اليوم حسب تقويم أم القرى
+              مواقيت اليوم حسب {methodName}
             </Text>
           </View>
 
-          <Text style={styles.fixedText}>ثابت</Text>
+          <Text style={styles.fixedText}>
+            {location?.source === "gps" ? "GPS" : "محدد"}
+          </Text>
         </View>
 
         <View style={styles.listCard}>
@@ -152,55 +180,41 @@ export default function PrayersTab() {
               style={[
                 styles.prayerRow,
                 prayer.isNightPrayer && styles.qiyamRow,
-                index === prayerRows.length - 1 &&
-                  styles.lastRow,
+                index === prayerRows.length - 1 && styles.lastRow,
               ]}
             >
               <View style={styles.prayerInfo}>
                 <View
                   style={[
                     styles.prayerIconBox,
-                    prayer.isNightPrayer &&
-                      styles.qiyamIconBox,
+                    prayer.isNightPrayer && styles.qiyamIconBox,
                   ]}
                 >
-                  <Text style={styles.prayerIcon}>
-                    {prayer.icon}
-                  </Text>
+                  <Text style={styles.prayerIcon}>{prayer.icon}</Text>
                 </View>
 
                 <View>
-                  <Text style={styles.prayerName}>
-                    {prayer.name}
-                  </Text>
+                  <Text style={styles.prayerName}>{prayer.name}</Text>
 
                   {prayer.isNightPrayer ? (
-                    <Text style={styles.prayerHint}>
-                      وقت مستحب
-                    </Text>
+                    <Text style={styles.prayerHint}>وقت مستحب</Text>
                   ) : null}
                 </View>
               </View>
 
               <View style={styles.prayerActions}>
-                <Text style={styles.prayerTime}>
-                  {prayer.time}
-                </Text>
+                <Text style={styles.prayerTime}>{prayer.time}</Text>
 
                 {prayer.id !== "sunrise" ? (
                   <Switch
                     value={Boolean(notifications[prayer.id])}
-                    onValueChange={() =>
-                      toggleNotification(prayer.id)
-                    }
+                    onValueChange={() => toggleNotification(prayer.id)}
                     trackColor={{
                       false: "#35445d",
                       true: "#327e82",
                     }}
                     thumbColor={
-                      notifications[prayer.id]
-                        ? "#72efdd"
-                        : "#a8b4c7"
+                      notifications[prayer.id] ? "#72efdd" : "#a8b4c7"
                     }
                   />
                 ) : (
@@ -214,10 +228,8 @@ export default function PrayersTab() {
         <View style={styles.infoCard}>
           <Text style={styles.infoIcon}>ⓘ</Text>
           <Text style={styles.infoText}>
-            تم تثبيت الموقع على مكة المكرمة بإحداثيات
-            {" "}
-            21.4225, 39.8262، وتستخدم المواقيت طريقة حساب أم
-            القرى.
+            المواقيت معتمدة لمدينة {cityName} وفق طريقة {methodName} ومذهب العصر{" "}
+            {asrMadhab === "hanafi" ? "الحنفي" : "القياسي"}.
           </Text>
         </View>
       </ScrollView>
@@ -379,3 +391,4 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
+
