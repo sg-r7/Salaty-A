@@ -21,10 +21,10 @@ export interface NotificationSettings {
   adhanSound: AdhanSound;
 }
 
-const NOTIFICATION_SETTINGS_KEY =
-  "salaty_notification_settings";
+const NOTIFICATION_SETTINGS_KEY = "salaty_notification_settings";
 
-const PRAYER_CHANNEL_ID = "salaty_prayer_notifications";
+// تغيير المعرف لفرض إنشاء القناة الجديدة بالصوت المخصص وتجاوز كاش النظام القديم
+const PRAYER_CHANNEL_ID = "prayer_makkah";
 const ATHKAR_CHANNEL_ID = "salaty_athkar_notifications";
 const FRIDAY_CHANNEL_ID = "salaty_friday_notifications";
 
@@ -32,7 +32,7 @@ const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   prayerNotifications: true,
   athkarNotifications: true,
   fridayReminder: true,
-  adhanSound: "default",
+  adhanSound: "makkah", // الصوت الافتراضي أذان مكة المكرمة
 };
 
 Notifications.setNotificationHandler({
@@ -45,21 +45,17 @@ Notifications.setNotificationHandler({
 
 function getSoundFileName(sound: AdhanSound): string {
   if (sound === "makkah") {
-    return "makkah.mp3";
+    return "makkah";
   }
-
   if (sound === "madinah") {
-    return "madinah.mp3";
+    return "madinah";
   }
-
   if (sound === "aqsa") {
-    return "aqsa.mp3";
+    return "aqsa";
   }
-
   if (sound === "takbeer") {
-    return "takbeer.mp3";
+    return "takbeer";
   }
-
   return "default";
 }
 
@@ -76,18 +72,14 @@ function isValidAdhanSound(value: unknown): value is AdhanSound {
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   const storedValue = await import(
     "@react-native-async-storage/async-storage"
-  ).then((module) =>
-    module.default.getItem(NOTIFICATION_SETTINGS_KEY)
-  );
+  ).then((module) => module.default.getItem(NOTIFICATION_SETTINGS_KEY));
 
   if (!storedValue) {
     return DEFAULT_NOTIFICATION_SETTINGS;
   }
 
   try {
-    const parsed = JSON.parse(storedValue) as Partial<
-      NotificationSettings
-    >;
+    const parsed = JSON.parse(storedValue) as Partial<NotificationSettings>;
 
     return {
       prayerNotifications:
@@ -129,65 +121,50 @@ export async function createNotificationChannels(): Promise<void> {
     return;
   }
 
-  await Notifications.setNotificationChannelAsync(
-    PRAYER_CHANNEL_ID,
-    {
-      name: "تنبيهات الصلاة",
-      description:
-        "تنبيهات مواقيت الصلاة حسب موقع المستخدم",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#72efdd",
-      sound: "default",
-      enableVibrate: true,
-      lockscreenVisibility:
-        Notifications.AndroidNotificationVisibility.PUBLIC,
-    }
-  );
+  // إنشاء قناة أذان مكة المكرمة تماماً كما في الفيديو
+  await Notifications.setNotificationChannelAsync(PRAYER_CHANNEL_ID, {
+    name: "Prayer Alert - Makkah",
+    description: "تنبيهات مواقيت الصلاة بصوت أذان الحرم المكي الشريف",
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 500, 250, 500],
+    lightColor: "#72efdd",
+    sound: "makkah", // يربط بالقناة ملف assets/makkah.mp3
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+  });
 
-  await Notifications.setNotificationChannelAsync(
-    ATHKAR_CHANNEL_ID,
-    {
-      name: "تنبيهات الأذكار",
-      description: "تذكيرات الأذكار اليومية",
-      importance: Notifications.AndroidImportance.DEFAULT,
-      vibrationPattern: [0, 150, 150],
-      lightColor: "#72efdd",
-      sound: "default",
-      enableVibrate: true,
-      lockscreenVisibility:
-        Notifications.AndroidNotificationVisibility.PUBLIC,
-    }
-  );
+  await Notifications.setNotificationChannelAsync(ATHKAR_CHANNEL_ID, {
+    name: "تنبيهات الأذكار",
+    description: "تذكيرات الأذكار اليومية",
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 150, 150],
+    lightColor: "#72efdd",
+    sound: "default",
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
 
-  await Notifications.setNotificationChannelAsync(
-    FRIDAY_CHANNEL_ID,
-    {
-      name: "تذكير سورة الكهف",
-      description: "تذكير قراءة سورة الكهف يوم الجمعة",
-      importance: Notifications.AndroidImportance.DEFAULT,
-      vibrationPattern: [0, 150, 150],
-      lightColor: "#72efdd",
-      sound: "default",
-      enableVibrate: true,
-      lockscreenVisibility:
-        Notifications.AndroidNotificationVisibility.PUBLIC,
-    }
-  );
+  await Notifications.setNotificationChannelAsync(FRIDAY_CHANNEL_ID, {
+    name: "تذكير سورة الكهف",
+    description: "تذكير قراءة سورة الكهف يوم الجمعة",
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 150, 150],
+    lightColor: "#72efdd",
+    sound: "default",
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
   await createNotificationChannels();
 
-  const currentPermission =
-    await Notifications.getPermissionsAsync();
-
+  const currentPermission = await Notifications.getPermissionsAsync();
   let finalStatus = currentPermission.status;
 
   if (finalStatus !== "granted") {
-    const requestedPermission =
-      await Notifications.requestPermissionsAsync();
-
+    const requestedPermission = await Notifications.requestPermissionsAsync();
     finalStatus = requestedPermission.status;
   }
 
@@ -198,35 +175,31 @@ export async function registerForNotifications(): Promise<boolean> {
   return requestNotificationPermission();
 }
 
-function getNotificationSound(
-  sound: AdhanSound
-): string {
+function getNotificationSound(sound: AdhanSound): string {
   return getSoundFileName(sound);
 }
 
 export async function schedulePrayerNotification(
   prayer: PrayerNotificationItem,
-  sound: AdhanSound = "default"
+  sound: AdhanSound = "makkah"
 ): Promise<string | null> {
-  const remainingMilliseconds =
-    prayer.date.getTime() - Date.now();
+  const remainingMilliseconds = prayer.date.getTime() - Date.now();
 
   if (remainingMilliseconds <= 0) {
     return null;
   }
 
-  const seconds = Math.max(
-    1,
-    Math.ceil(remainingMilliseconds / 1000)
-  );
-
+  const seconds = Math.max(1, Math.ceil(remainingMilliseconds / 1000));
   const selectedSound = getNotificationSound(sound);
+
+  await createNotificationChannels();
 
   return Notifications.scheduleNotificationAsync({
     content: {
-      title: "حي على الصلاة",
+      title: "حي على الصلاة.. 🕋",
       body: `حان الآن وقت صلاة ${prayer.name}`,
       sound: selectedSound,
+      priority: Notifications.AndroidNotificationPriority.MAX,
       data: {
         type: "prayer",
         prayerId: prayer.id,
@@ -253,15 +226,11 @@ export async function schedulePrayerNotifications(
     return [];
   }
 
-  const sound = options?.sound || "default";
+  const sound = options?.sound || "makkah";
   const identifiers: string[] = [];
 
   for (const prayer of prayers) {
-    const identifier = await schedulePrayerNotification(
-      prayer,
-      sound
-    );
-
+    const identifier = await schedulePrayerNotification(prayer, sound);
     if (identifier) {
       identifiers.push(identifier);
     }
@@ -312,12 +281,8 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
   });
 }
 
-export async function cancelNotification(
-  identifier: string
-): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(
-    identifier
-  );
+export async function cancelNotification(identifier: string): Promise<void> {
+  await Notifications.cancelScheduledNotificationAsync(identifier);
 }
 
 export async function cancelAllScheduledNotifications(): Promise<void> {
@@ -327,4 +292,3 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
 export async function cancelAllNotifications(): Promise<void> {
   await cancelAllScheduledNotifications();
 }
-
