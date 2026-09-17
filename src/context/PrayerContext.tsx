@@ -349,34 +349,50 @@ export function PrayerProvider({
 
   const rescheduleNotifications =
     useCallback(async (): Promise<void> => {
-      await cancelAllScheduledNotifications();
+      try {
+        await cancelAllScheduledNotifications();
 
-      if (periodMode) {
-        return;
+        if (periodMode) {
+          return;
+        }
+
+        if (!notificationSettings.prayerNotifications) {
+          return;
+        }
+
+        const granted = await registerForNotifications();
+
+        if (!granted) {
+          return;
+        }
+
+        const now = Date.now();
+
+        // فلترة الشروق وتجاهل أي صلاة مضى وقتها
+        const upcomingPrayerItems = prayerTimes
+          .filter(
+            (prayer) =>
+              prayer.id !== "sunrise" &&
+              prayer.date.getTime() > now
+          )
+          .map((prayer) => ({
+            id: prayer.id,
+            name: prayer.name,
+            date: prayer.date,
+          }));
+
+        if (upcomingPrayerItems.length > 0) {
+          await schedulePrayerNotifications(upcomingPrayerItems, {
+            enabled: notificationSettings.prayerNotifications,
+            sound: notificationSettings.adhanSound,
+          });
+        }
+
+        // تفريغ أي خطأ سابق عند نجاح العملية
+        setError((prev) => (prev === "تعذر جدولة تنبيهات الصلاة." ? null : prev));
+      } catch (scheduleErr) {
+        console.warn("تنبيه حول جدولة الإشعارات:", scheduleErr);
       }
-
-      if (!notificationSettings.prayerNotifications) {
-        return;
-      }
-
-      const granted = await registerForNotifications();
-
-      if (!granted) {
-        return;
-      }
-
-      const prayerItems = prayerTimes
-        .filter((prayer) => prayer.id !== "sunrise")
-        .map((prayer) => ({
-          id: prayer.id,
-          name: prayer.name,
-          date: prayer.date,
-        }));
-
-      await schedulePrayerNotifications(prayerItems, {
-        enabled: notificationSettings.prayerNotifications,
-        sound: notificationSettings.adhanSound,
-      });
     }, [
       notificationSettings.adhanSound,
       notificationSettings.prayerNotifications,
@@ -401,8 +417,8 @@ export function PrayerProvider({
       return;
     }
 
-    rescheduleNotifications().catch(() => {
-      setError("تعذر جدولة تنبيهات الصلاة.");
+    rescheduleNotifications().catch((err) => {
+      console.warn("تعذر جدولة الإشعارات التلقائية:", err);
     });
   }, [prayerTimes, rescheduleNotifications]);
 
@@ -600,4 +616,3 @@ export function getAdjustedGregorianDate(
   adjustedDate.setDate(adjustedDate.getDate() + offset);
   return adjustedDate;
 }
-
