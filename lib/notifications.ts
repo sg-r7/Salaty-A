@@ -1,7 +1,8 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-const PRAYER_CHANNEL_ID = "prayer_notifications";
+// تغيير المعرف يضمن إنشاء قناة جديدة كلياً بالصوت المخصص وتجاوز كاش القناة القديمة
+const PRAYER_CHANNEL_ID = "prayer_makkah";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -11,18 +12,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// دالة لضمان وجود القناة في أندرويد دون تكرار
+// دالة لإنشاء وضمان وجود قناة أذان مكة في أندرويد
 async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync(PRAYER_CHANNEL_ID, {
-      name: "تنبيهات الصلاة",
-      description: "تنبيهات مواقيت الصلاة حسب توقيت مكة المكرمة",
+      name: "Prayer Alert - Makkah",
+      description: "تنبيهات مواقيت الصلاة بصوت أذان الحرم المكي الشريف",
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
+      vibrationPattern: [0, 500, 250, 500],
       lightColor: "#72efdd",
-      sound: "default",
+      sound: "makkah", // اسم الملف بدون .mp3 ليرتبط بـ assets/makkah.mp3
       enableVibrate: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
     });
   }
 }
@@ -51,7 +53,6 @@ export async function schedulePrayerNotification(
   prayerDate: Date | string | number
 ): Promise<void> {
   try {
-    // 1. تحويل التاريخ والتحقق من صحته لتفادي قيمة NaN
     const parsedDate = prayerDate instanceof Date ? prayerDate : new Date(prayerDate);
     const targetTimestamp = parsedDate.getTime();
 
@@ -62,22 +63,19 @@ export async function schedulePrayerNotification(
 
     const remainingMilliseconds = targetTimestamp - Date.now();
 
-    // إذا فات وقت الصلاة، نتجاهل جدولتها
     if (remainingMilliseconds <= 0) {
       return;
     }
 
     const triggerSeconds = Math.max(1, Math.ceil(remainingMilliseconds / 1000));
 
-    // 2. التأكد من تهيئة القناة قبل الجدولة
     await ensureNotificationChannel();
 
-    // 3. جدولة الإشعار
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "حي على الصلاة..",
-        body: `حان الآن وقت صلاة ${prayerName} حسب توقيت مكة المكرمة`,
-        sound: "default",
+        title: "حي على الصلاة.. 🕋",
+        body: `حان الآن وقت صلاة ${prayerName}`,
+        sound: "makkah", // نغمة الأذان
         priority: Notifications.AndroidNotificationPriority.MAX,
       },
       trigger: {
