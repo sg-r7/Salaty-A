@@ -1,4 +1,4 @@
-{
+Enter{
   "expo": {
     "name": "صلاتي | SALATY",
     "slug": "salaty-app",
@@ -45,7 +45,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "c20eceeb-2eed-4b17-ab3f-aeb75d506bbc"
+        "projectId": "620ecc6b-2eee-4b17-aa5f-aeb75d5ed5bc"
       }
     }
   }
