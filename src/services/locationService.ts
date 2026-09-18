@@ -463,4 +463,3 @@ export async function detectCurrentLocation(): Promise<SavedLocation> {
 export async function clearSavedLocation(): Promise<void> {
   await AsyncStorage.removeItem(LOCATION_STORAGE_KEY);
 }
-
