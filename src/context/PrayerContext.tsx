@@ -262,7 +262,7 @@ export function PrayerProvider({
       prayerNotifications: true,
       athkarNotifications: true,
       fridayReminder: true,
-      adhanSound: "default",
+      adhanSound: "makkah",
     });
 
   const [prayerTimes, setPrayerTimes] = useState<
@@ -293,7 +293,16 @@ export function PrayerProvider({
       ]);
 
     setLocationState(savedLocation);
-    setNotificationSettingsState(savedNotifications);
+
+    // تصفية أي إعداد صوت قديم مخزن كـ default وتوجيهه للأذان
+    const normalizedNotifications: NotificationSettings = {
+      ...savedNotifications,
+      adhanSound:
+        savedNotifications.adhanSound === "default"
+          ? "makkah"
+          : savedNotifications.adhanSound,
+    };
+    setNotificationSettingsState(normalizedNotifications);
 
     if (!savedSettings) {
       return;
@@ -382,13 +391,18 @@ export function PrayerProvider({
           }));
 
         if (upcomingPrayerItems.length > 0) {
+          // إجبار تشغيل صوت الأذان وتجاوز نغمة النظام الافتراضية
+          const activeAdhanSound =
+            notificationSettings.adhanSound === "default"
+              ? "makkah"
+              : notificationSettings.adhanSound;
+
           await schedulePrayerNotifications(upcomingPrayerItems, {
             enabled: notificationSettings.prayerNotifications,
-            sound: notificationSettings.adhanSound,
+            sound: activeAdhanSound,
           });
         }
 
-        // تفريغ أي خطأ سابق عند نجاح العملية
         setError((prev) => (prev === "تعذر جدولة تنبيهات الصلاة." ? null : prev));
       } catch (scheduleErr) {
         console.warn("تنبيه حول جدولة الإشعارات:", scheduleErr);
