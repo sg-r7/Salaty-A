@@ -23,8 +23,8 @@ export interface NotificationSettings {
 
 const NOTIFICATION_SETTINGS_KEY = "salaty_notification_settings";
 
-// تغيير المعرف لفرض إنشاء القناة الجديدة بالصوت المخصص وتجاوز كاش النظام القديم
-const PRAYER_CHANNEL_ID = "prayer_makkah";
+// معرّف القناة الجديد لكسر تجميد أندرويد وتفعيل الصوت المدمج الجديد
+const PRAYER_CHANNEL_ID = "prayer-adhan-v3-2026";
 const ATHKAR_CHANNEL_ID = "salaty_athkar_notifications";
 const FRIDAY_CHANNEL_ID = "salaty_friday_notifications";
 
@@ -32,7 +32,7 @@ const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   prayerNotifications: true,
   athkarNotifications: true,
   fridayReminder: true,
-  adhanSound: "makkah", // الصوت الافتراضي أذان مكة المكرمة
+  adhanSound: "makkah",
 };
 
 Notifications.setNotificationHandler({
@@ -44,19 +44,10 @@ Notifications.setNotificationHandler({
 });
 
 function getSoundFileName(sound: AdhanSound): string {
-  if (sound === "makkah") {
-    return "makkah";
+  if (sound === "default") {
+    return "default";
   }
-  if (sound === "madinah") {
-    return "madinah";
-  }
-  if (sound === "aqsa") {
-    return "aqsa";
-  }
-  if (sound === "takbeer") {
-    return "takbeer";
-  }
-  return "default";
+  return "azan.mp3";
 }
 
 function isValidAdhanSound(value: unknown): value is AdhanSound {
@@ -121,14 +112,13 @@ export async function createNotificationChannels(): Promise<void> {
     return;
   }
 
-  // إنشاء قناة أذان مكة المكرمة تماماً كما في الفيديو
   await Notifications.setNotificationChannelAsync(PRAYER_CHANNEL_ID, {
-    name: "Prayer Alert - Makkah",
-    description: "تنبيهات مواقيت الصلاة بصوت أذان الحرم المكي الشريف",
+    name: "أذان ومواقيت الصلاة",
+    description: "تنبيهات مواقيت الصلاة بصوت الأذان المدمج",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 500, 250, 500],
     lightColor: "#72efdd",
-    sound: "makkah", // يربط بالقناة ملف assets/makkah.mp3
+    sound: "azan.mp3",
     enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
@@ -137,7 +127,7 @@ export async function createNotificationChannels(): Promise<void> {
   await Notifications.setNotificationChannelAsync(ATHKAR_CHANNEL_ID, {
     name: "تنبيهات الأذكار",
     description: "تذكيرات الأذكار اليومية",
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 150, 150],
     lightColor: "#72efdd",
     sound: "default",
