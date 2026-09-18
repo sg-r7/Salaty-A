@@ -3,7 +3,7 @@
     "name": "صلاتي | SALATY",
     "slug": "salaty-app",
     "owner": "sgr7s-team",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.salaty.app",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#071739"
@@ -39,7 +39,7 @@
           "icon": "./assets/icon.png",
           "color": "#72efdd",
           "sounds": [
-            "./assets/makkah.mp3"
+            "./assets/azan.mp3"
           ]
         }
       ]
