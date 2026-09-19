@@ -1,8 +1,8 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
-export const PRAYER_NOTIFICATION_CHANNEL_ID = 'prayer-adhan-v3-2026';
-export const PRAYER_NOTIFICATION_SOUND = 'azan.mp3';
+export const PRAYER_NOTIFICATION_CHANNEL_ID = "prayer_notifications";
+export const PRAYER_NOTIFICATION_SOUND = "azan.mp3";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -12,108 +12,73 @@ Notifications.setNotificationHandler({
   }),
 });
 
-function logNotificationError(operation: string, error: unknown): void {
-  console.error(`[notifications] ${operation} failed:`, error);
-}
-
-export async function configurePrayerNotificationChannel(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-
-  try {
-    await Notifications.setNotificationChannelAsync(PRAYER_NOTIFICATION_CHANNEL_ID, {
-      name: 'أذان ومواقيت الصلاة',
-      description: 'تنبيهات دخول أوقات الصلاة حسب مواقيت المدينة المحددة',
-      importance: Notifications.AndroidImportance.MAX,
-      sound: PRAYER_NOTIFICATION_SOUND,
-      vibrationPattern: [0, 300, 200, 500],
-      lightColor: '#72efdd',
-      enableVibrate: true,
-      enableLights: true,
-      showBadge: true,
-    });
-    console.log(`[notifications] channel created: ${PRAYER_NOTIFICATION_CHANNEL_ID}`);
-    return true;
-  } catch (error) {
-    logNotificationError('setNotificationChannelAsync', error);
-    return false;
+export async function configurePrayerNotificationChannel(): Promise<void> {
+  if (Platform.OS !== "android") {
+    return;
   }
+
+  await Notifications.setNotificationChannelAsync(
+    PRAYER_NOTIFICATION_CHANNEL_ID,
+    {
+      name: "أوقات الصلاة",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 250, 500],
+      lightColor: "#72efdd",
+      sound: PRAYER_NOTIFICATION_SOUND,
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    }
+  );
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {
-  try {
-    const permissions = await Notifications.getPermissionsAsync();
-    let finalStatus = permissions.status;
+  await configurePrayerNotificationChannel();
 
-    if (finalStatus !== 'granted') {
-      const requested = await Notifications.requestPermissionsAsync();
-      finalStatus = requested.status;
-    }
+  const { status: existingStatus } =
+    await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
 
-    if (finalStatus !== 'granted') {
-      console.warn(`[notifications] permission not granted: ${finalStatus}`);
-      return false;
-    }
-
-    if (Platform.OS === 'android') {
-      await configurePrayerNotificationChannel();
-    }
-
-    return true;
-  } catch (error) {
-    logNotificationError('requestNotificationPermissions', error);
-    return false;
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
   }
+
+  return finalStatus === "granted";
 }
 
 export async function schedulePrayerNotification(
   prayerName: string,
   prayerDate: Date
 ): Promise<string | null> {
-  if (!prayerDate || isNaN(prayerDate.getTime()) || prayerDate.getTime() <= Date.now()) {
-    console.warn(`[notifications] skipped past prayer date: ${prayerName}`);
+  if (!(prayerDate instanceof Date)) {
     return null;
   }
 
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) {
-    console.warn('[notifications] skipped scheduling: permission denied');
+  const time = prayerDate.getTime();
+  if (!Number.isFinite(time) || time <= Date.now()) {
     return null;
   }
 
-  try {
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'حان الآن وقت الصلاة',
-        body: `حي على الصلاة.. حان الآن وقت صلاة ${prayerName}`,
-        sound: PRAYER_NOTIFICATION_SOUND,
-        data: {
-          type: 'prayer',
-          prayerName,
-          prayerDate: prayerDate.toISOString(),
-        },
+  await configurePrayerNotificationChannel();
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: "حي على الصلاة.. 🕋",
+      body: `حان الآن وقت صلاة ${prayerName}`,
+      sound: PRAYER_NOTIFICATION_SOUND,
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      data: {
+        prayerName,
       },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: prayerDate,
-        channelId: PRAYER_NOTIFICATION_CHANNEL_ID,
-      },
-    });
-
-    console.log(`[notifications] scheduled ${prayerName}: ${notificationId}`);
-    return notificationId;
-  } catch (error) {
-    logNotificationError(`scheduleNotificationAsync (${prayerName})`, error);
-    return null;
-  }
+    },
+    trigger: {
+      date: prayerDate,
+      channelId: PRAYER_NOTIFICATION_CHANNEL_ID,
+    },
+  });
 }
 
-export async function cancelAllNotifications(): Promise<boolean> {
-  try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    console.log('[notifications] all scheduled notifications cancelled');
-    return true;
-  } catch (error) {
-    logNotificationError('cancelAllScheduledNotificationsAsync', error);
-    return false;
-  }
+export async function cancelAllNotifications(): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
 }
