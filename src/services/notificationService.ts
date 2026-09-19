@@ -1,13 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-export type AdhanSound =
-  | "default"
-  | "makkah"
-  | "madinah"
-  | "aqsa"
-  | "takbeer";
-
 export interface PrayerNotificationItem {
   id: string;
   name: string;
@@ -18,10 +11,10 @@ export interface NotificationSettings {
   prayerNotifications: boolean;
   athkarNotifications: boolean;
   fridayReminder: boolean;
-  adhanSound: AdhanSound;
 }
 
 const NOTIFICATION_SETTINGS_KEY = "salaty_notification_settings";
+const PRAYER_NOTIFICATION_SOUND = "azan.mp3";
 
 const PRAYER_CHANNEL_ID = "prayer-adhan-v3-2026";
 const ATHKAR_CHANNEL_ID = "salaty_athkar_notifications";
@@ -31,7 +24,6 @@ const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   prayerNotifications: true,
   athkarNotifications: true,
   fridayReminder: true,
-  adhanSound: "makkah",
 };
 
 Notifications.setNotificationHandler({
@@ -41,24 +33,6 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
-
-function getSoundFileName(sound: AdhanSound): string {
-  if (sound === "default") {
-    return "default";
-  }
-
-  return "azan.mp3";
-}
-
-function isValidAdhanSound(value: unknown): value is AdhanSound {
-  return (
-    value === "default" ||
-    value === "makkah" ||
-    value === "madinah" ||
-    value === "aqsa" ||
-    value === "takbeer"
-  );
-}
 
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   const storedValue = await import(
@@ -85,9 +59,6 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         typeof parsed.fridayReminder === "boolean"
           ? parsed.fridayReminder
           : DEFAULT_NOTIFICATION_SETTINGS.fridayReminder,
-      adhanSound: isValidAdhanSound(parsed.adhanSound)
-        ? parsed.adhanSound
-        : DEFAULT_NOTIFICATION_SETTINGS.adhanSound,
     };
   } catch {
     return DEFAULT_NOTIFICATION_SETTINGS;
@@ -118,7 +89,7 @@ export async function createNotificationChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 500, 250, 500],
     lightColor: "#72efdd",
-    sound: "azan.mp3",
+    sound: PRAYER_NOTIFICATION_SOUND,
     enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
@@ -167,13 +138,9 @@ export async function registerForNotifications(): Promise<boolean> {
   return requestNotificationPermission();
 }
 
-function getNotificationSound(sound: AdhanSound): string {
-  return getSoundFileName(sound);
-}
-
 export async function schedulePrayerNotification(
   prayer: PrayerNotificationItem,
-  sound: AdhanSound = "makkah"
+  _sound?: string
 ): Promise<string | null> {
   if (!(prayer.date instanceof Date)) {
     return null;
@@ -189,15 +156,13 @@ export async function schedulePrayerNotification(
     return null;
   }
 
-  const selectedSound = getNotificationSound(sound);
-
   await createNotificationChannels();
 
   return Notifications.scheduleNotificationAsync({
     content: {
       title: "حي على الصلاة.. 🕋",
       body: `حان الآن وقت صلاة ${prayer.name}`,
-      sound: selectedSound,
+      sound: PRAYER_NOTIFICATION_SOUND,
       priority: Notifications.AndroidNotificationPriority.MAX,
       data: {
         type: "prayer",
@@ -216,18 +181,17 @@ export async function schedulePrayerNotifications(
   prayers: PrayerNotificationItem[],
   options?: {
     enabled?: boolean;
-    sound?: AdhanSound;
+    sound?: string;
   }
 ): Promise<string[]> {
   if (options?.enabled === false) {
     return [];
   }
 
-  const sound = options?.sound || "makkah";
   const identifiers: string[] = [];
 
   for (const prayer of prayers) {
-    const identifier = await schedulePrayerNotification(prayer, sound);
+    const identifier = await schedulePrayerNotification(prayer);
 
     if (identifier) {
       identifiers.push(identifier);
