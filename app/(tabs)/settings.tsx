@@ -28,10 +28,7 @@ import {
   searchCities,
   saveCity,
 } from "../../src/services/locationService";
-import {
-  AdhanSound,
-  NotificationSettings,
-} from "../../src/services/notificationService";
+import { NotificationSettings } from "../../src/services/notificationService";
 
 interface SettingRowProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -70,38 +67,6 @@ const calculationMethods: Array<{
   },
 ];
 
-const adhanSounds: Array<{
-  id: AdhanSound;
-  title: string;
-  subtitle: string;
-}> = [
-  {
-    id: "default",
-    title: "صوت الجهاز الافتراضي",
-    subtitle: "استخدام الصوت الافتراضي للنظام",
-  },
-  {
-    id: "makkah",
-    title: "أذان مكة المكرمة",
-    subtitle: "يحتاج إلى ملف makkah.mp3",
-  },
-  {
-    id: "madinah",
-    title: "أذان المدينة المنورة",
-    subtitle: "يحتاج إلى ملف madinah.mp3",
-  },
-  {
-    id: "aqsa",
-    title: "أذان المسجد الأقصى",
-    subtitle: "يحتاج إلى ملف aqsa.mp3",
-  },
-  {
-    id: "takbeer",
-    title: "تكبيرات قصيرة",
-    subtitle: "يحتاج إلى ملف takbeer.mp3",
-  },
-];
-
 const hijriOffsets = [-2, -1, 0, 1, 2];
 
 function getMethodTitle(method: CalculationMethodName): string {
@@ -114,12 +79,6 @@ function getMethodTitle(method: CalculationMethodName): string {
 
 function getMadhabTitle(madhab: AsrMadhab): string {
   return madhab === "hanafi" ? "حنفي" : "قياسي";
-}
-
-function getSoundTitle(sound: AdhanSound): string {
-  const item = adhanSounds.find((adhanSound) => adhanSound.id === sound);
-
-  return item?.title || "صوت الجهاز الافتراضي";
 }
 
 function getOffsetTitle(offset: number): string {
@@ -265,7 +224,6 @@ export default function SettingsTab() {
     useState(false);
   const [madhabModalVisible, setMadhabModalVisible] =
     useState(false);
-  const [soundModalVisible, setSoundModalVisible] = useState(false);
   const [offsetModalVisible, setOffsetModalVisible] = useState(false);
 
   const [locationQuery, setLocationQuery] = useState("");
@@ -622,18 +580,6 @@ export default function SettingsTab() {
             <View style={styles.rowDivider} />
 
             <SettingRow
-              icon="musical-notes-outline"
-              title="صوت الأذان"
-              subtitle={getSoundTitle(
-                notificationSettings.adhanSound
-              )}
-              onPress={() => setSoundModalVisible(true)}
-              color="#a78bfa"
-            />
-
-            <View style={styles.rowDivider} />
-
-            <SettingRow
               icon="book-outline"
               title="تذكير الأذكار"
               subtitle="تذكير يومي بالأذكار"
@@ -960,60 +906,6 @@ export default function SettingsTab() {
             </Text>
           </View>
         </Pressable>
-      </SelectionModal>
-
-      <SelectionModal
-        visible={soundModalVisible}
-        title="اختيار صوت الأذان"
-        onClose={() => setSoundModalVisible(false)}
-      >
-        {adhanSounds.map((sound) => {
-          const selected =
-            sound.id === notificationSettings.adhanSound;
-
-          return (
-            <Pressable
-              key={sound.id}
-              onPress={async () => {
-                try {
-                  await updateNotifications({
-                    adhanSound: sound.id,
-                  });
-                  setSoundModalVisible(false);
-                } catch {
-                  Alert.alert(
-                    "خطأ",
-                    "تعذر حفظ صوت الأذان."
-                  );
-                }
-              }}
-              style={[
-                styles.optionRow,
-                selected && styles.selectedOptionRow,
-              ]}
-            >
-              <View style={styles.optionRadio}>
-                {selected ? (
-                  <View style={styles.optionRadioSelected} />
-                ) : null}
-              </View>
-
-              <View style={styles.optionTextContainer}>
-                <Text
-                  style={[
-                    styles.optionTitle,
-                    selected && styles.selectedOptionTitle,
-                  ]}
-                >
-                  {sound.title}
-                </Text>
-                <Text style={styles.optionSubtitle}>
-                  {sound.subtitle}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
       </SelectionModal>
 
       <SelectionModal
