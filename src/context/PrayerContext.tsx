@@ -362,26 +362,38 @@ export function PrayerProvider({
         await cancelAllScheduledNotifications();
 
         if (periodMode) {
+          console.info(
+            "تم تجاوز جدولة إشعارات الصلاة لأن وضع الدورة مفعّل."
+          );
           return;
         }
 
         if (!notificationSettings.prayerNotifications) {
+          console.info(
+            "تم تجاوز جدولة إشعارات الصلاة لأنها معطّلة من الإعدادات."
+          );
           return;
         }
 
         const granted = await registerForNotifications();
 
         if (!granted) {
+          const permissionError =
+            "لم يتم منح إذن الإشعارات، لذلك لم تتم جدولة إشعارات الصلاة.";
+
+          console.error(permissionError);
+          setError(permissionError);
           return;
         }
 
         const now = Date.now();
 
-        // فلترة الشروق وتجاهل أي صلاة مضى وقتها
         const upcomingPrayerItems = prayerTimes
           .filter(
             (prayer) =>
               prayer.id !== "sunrise" &&
+              prayer.date instanceof Date &&
+              Number.isFinite(prayer.date.getTime()) &&
               prayer.date.getTime() > now
           )
           .map((prayer) => ({
@@ -390,22 +402,57 @@ export function PrayerProvider({
             date: prayer.date,
           }));
 
-        if (upcomingPrayerItems.length > 0) {
-          // إجبار تشغيل صوت الأذان وتجاوز نغمة النظام الافتراضية
-          const activeAdhanSound =
-            notificationSettings.adhanSound === "default"
-              ? "makkah"
-              : notificationSettings.adhanSound;
+        const activeAdhanSound =
+          notificationSettings.adhanSound === "default"
+            ? "makkah"
+            : notificationSettings.adhanSound;
 
+        const scheduledIdentifiers =
           await schedulePrayerNotifications(upcomingPrayerItems, {
             enabled: notificationSettings.prayerNotifications,
             sound: activeAdhanSound,
           });
+
+        console.info(
+          `تمت جدولة ${scheduledIdentifiers.length} من أصل ${upcomingPrayerItems.length} إشعارات للصلاة.`,
+          {
+            identifiers: scheduledIdentifiers,
+            sound: activeAdhanSound,
+            prayers: upcomingPrayerItems.map((prayer) => ({
+              id: prayer.id,
+              name: prayer.name,
+              date: prayer.date.toISOString(),
+            })),
+          }
+        );
+
+        if (
+          upcomingPrayerItems.length > 0 &&
+          scheduledIdentifiers.length === 0
+        ) {
+          const schedulingError =
+            "تعذر جدولة إشعارات الصلاة القادمة؛ لم يُنشأ أي إشعار.";
+
+          console.error(schedulingError);
+          setError(schedulingError);
+          return;
         }
 
-        setError((prev) => (prev === "تعذر جدولة تنبيهات الصلاة." ? null : prev));
+        setError((previousError) =>
+          previousError?.startsWith("تعذر جدولة إشعارات الصلاة") ||
+          previousError?.startsWith("لم يتم منح إذن الإشعارات")
+            ? null
+            : previousError
+        );
       } catch (scheduleErr) {
-        console.warn("تنبيه حول جدولة الإشعارات:", scheduleErr);
+        const errorMessage =
+          scheduleErr instanceof Error
+            ? scheduleErr.message
+            : String(scheduleErr);
+        const schedulingError = `فشل جدولة إشعارات الصلاة: ${errorMessage}`;
+
+        console.error(schedulingError, scheduleErr);
+        setError(schedulingError);
       }
     }, [
       notificationSettings.adhanSound,
@@ -432,7 +479,12 @@ export function PrayerProvider({
     }
 
     rescheduleNotifications().catch((err) => {
-      console.warn("تعذر جدولة الإشعارات التلقائية:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : String(err);
+      const schedulingError = `فشل تشغيل جدولة الإشعارات التلقائية: ${errorMessage}`;
+
+      console.error(schedulingError, err);
+      setError(schedulingError);
     });
   }, [prayerTimes, rescheduleNotifications]);
 
