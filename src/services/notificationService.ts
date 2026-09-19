@@ -23,7 +23,6 @@ export interface NotificationSettings {
 
 const NOTIFICATION_SETTINGS_KEY = "salaty_notification_settings";
 
-// معرّف القناة الجديد لكسر تجميد أندرويد وتفعيل الصوت المدمج الجديد
 const PRAYER_CHANNEL_ID = "prayer-adhan-v3-2026";
 const ATHKAR_CHANNEL_ID = "salaty_athkar_notifications";
 const FRIDAY_CHANNEL_ID = "salaty_friday_notifications";
@@ -47,6 +46,7 @@ function getSoundFileName(sound: AdhanSound): string {
   if (sound === "default") {
     return "default";
   }
+
   return "azan.mp3";
 }
 
@@ -154,7 +154,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
   let finalStatus = currentPermission.status;
 
   if (finalStatus !== "granted") {
-    const requestedPermission = await Notifications.requestPermissionsAsync();
+    const requestedPermission =
+      await Notifications.requestPermissionsAsync();
+
     finalStatus = requestedPermission.status;
   }
 
@@ -173,13 +175,20 @@ export async function schedulePrayerNotification(
   prayer: PrayerNotificationItem,
   sound: AdhanSound = "makkah"
 ): Promise<string | null> {
-  const remainingMilliseconds = prayer.date.getTime() - Date.now();
-
-  if (remainingMilliseconds <= 0) {
+  if (!(prayer.date instanceof Date)) {
     return null;
   }
 
-  const seconds = Math.max(1, Math.ceil(remainingMilliseconds / 1000));
+  const prayerTime = prayer.date.getTime();
+
+  if (!Number.isFinite(prayerTime)) {
+    return null;
+  }
+
+  if (prayerTime <= Date.now()) {
+    return null;
+  }
+
   const selectedSound = getNotificationSound(sound);
 
   await createNotificationChannels();
@@ -197,9 +206,8 @@ export async function schedulePrayerNotification(
       },
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds,
-      repeats: false,
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: prayer.date,
       channelId: PRAYER_CHANNEL_ID,
     },
   });
@@ -221,6 +229,7 @@ export async function schedulePrayerNotifications(
 
   for (const prayer of prayers) {
     const identifier = await schedulePrayerNotification(prayer, sound);
+
     if (identifier) {
       identifiers.push(identifier);
     }
@@ -271,7 +280,9 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
   });
 }
 
-export async function cancelNotification(identifier: string): Promise<void> {
+export async function cancelNotification(
+  identifier: string
+): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(identifier);
 }
 
@@ -282,3 +293,4 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
 export async function cancelAllNotifications(): Promise<void> {
   await cancelAllScheduledNotifications();
 }
+
