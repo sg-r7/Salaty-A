@@ -20,7 +20,6 @@ import {
   getSavedLocation,
 } from "../services/locationService";
 import {
-  AdhanSound,
   NotificationSettings,
   cancelAllScheduledNotifications,
   getNotificationSettings,
@@ -262,7 +261,6 @@ export function PrayerProvider({
       prayerNotifications: true,
       athkarNotifications: true,
       fridayReminder: true,
-      adhanSound: "makkah",
     });
 
   const [prayerTimes, setPrayerTimes] = useState<
@@ -294,15 +292,7 @@ export function PrayerProvider({
 
     setLocationState(savedLocation);
 
-    // تصفية أي إعداد صوت قديم مخزن كـ default وتوجيهه للأذان
-    const normalizedNotifications: NotificationSettings = {
-      ...savedNotifications,
-      adhanSound:
-        savedNotifications.adhanSound === "default"
-          ? "makkah"
-          : savedNotifications.adhanSound,
-    };
-    setNotificationSettingsState(normalizedNotifications);
+    setNotificationSettingsState(savedNotifications);
 
     if (!savedSettings) {
       return;
@@ -365,6 +355,7 @@ export function PrayerProvider({
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأن وضع الدورة مفعّل."
           );
+
           return;
         }
 
@@ -372,6 +363,7 @@ export function PrayerProvider({
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأنها معطّلة من الإعدادات."
           );
+
           return;
         }
 
@@ -383,6 +375,7 @@ export function PrayerProvider({
 
           console.error(permissionError);
           setError(permissionError);
+
           return;
         }
 
@@ -402,22 +395,15 @@ export function PrayerProvider({
             date: prayer.date,
           }));
 
-        const activeAdhanSound =
-          notificationSettings.adhanSound === "default"
-            ? "makkah"
-            : notificationSettings.adhanSound;
-
         const scheduledIdentifiers =
           await schedulePrayerNotifications(upcomingPrayerItems, {
             enabled: notificationSettings.prayerNotifications,
-            sound: activeAdhanSound,
           });
 
         console.info(
           `تمت جدولة ${scheduledIdentifiers.length} من أصل ${upcomingPrayerItems.length} إشعارات للصلاة.`,
           {
             identifiers: scheduledIdentifiers,
-            sound: activeAdhanSound,
             prayers: upcomingPrayerItems.map((prayer) => ({
               id: prayer.id,
               name: prayer.name,
@@ -435,6 +421,7 @@ export function PrayerProvider({
 
           console.error(schedulingError);
           setError(schedulingError);
+
           return;
         }
 
@@ -449,13 +436,13 @@ export function PrayerProvider({
           scheduleErr instanceof Error
             ? scheduleErr.message
             : String(scheduleErr);
+
         const schedulingError = `فشل جدولة إشعارات الصلاة: ${errorMessage}`;
 
         console.error(schedulingError, scheduleErr);
         setError(schedulingError);
       }
     }, [
-      notificationSettings.adhanSound,
       notificationSettings.prayerNotifications,
       periodMode,
       prayerTimes,
@@ -481,6 +468,7 @@ export function PrayerProvider({
     rescheduleNotifications().catch((err) => {
       const errorMessage =
         err instanceof Error ? err.message : String(err);
+
       const schedulingError = `فشل تشغيل جدولة الإشعارات التلقائية: ${errorMessage}`;
 
       console.error(schedulingError, err);
@@ -680,5 +668,6 @@ export function getAdjustedGregorianDate(
 ): Date {
   const adjustedDate = new Date(date);
   adjustedDate.setDate(adjustedDate.getDate() + offset);
+
   return adjustedDate;
 }
