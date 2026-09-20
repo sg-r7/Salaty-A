@@ -1,7 +1,6 @@
 import React, {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -13,7 +12,6 @@ import {
   Text,
   View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -30,22 +28,6 @@ const prayerIcons: Record<string, string> = {
   maghrib: "☾",
   isha: "☽",
 };
-
-const COMPLETED_PRAYERS_STORAGE_KEY =
-  "salaty_completed_prayers";
-
-interface StoredCompletedPrayers {
-  date: string;
-  completed: Record<string, boolean>;
-}
-
-function getDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
 
 function formatCountdown(milliseconds: number): string {
   if (milliseconds <= 0) {
@@ -116,133 +98,24 @@ export default function HomeTab() {
     loading,
     error,
     refreshPrayerData,
+    completedPrayers,
+    completedPrayerCount,
+    togglePrayerCompletion,
   } = usePrayer();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const [featuresVisible, setFeaturesVisible] = useState(false);
-  const [completedPrayers, setCompletedPrayers] = useState<
-    Record<string, boolean>
-  >({});
-  const completedPrayersDateRef = useRef(getDateKey(new Date()));
-  const completedPrayersLoadedRef = useRef(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCompletedPrayers = async (): Promise<void> => {
-      const today = getDateKey(new Date());
-      completedPrayersDateRef.current = today;
-
-      try {
-        const storedValue = await AsyncStorage.getItem(
-          COMPLETED_PRAYERS_STORAGE_KEY
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (!storedValue) {
-          setCompletedPrayers({});
-          completedPrayersLoadedRef.current = true;
-          return;
-        }
-
-        const parsed = JSON.parse(
-          storedValue
-        ) as Partial<StoredCompletedPrayers>;
-
-        if (
-          parsed.date !== today ||
-          !parsed.completed ||
-          typeof parsed.completed !== "object"
-        ) {
-          setCompletedPrayers({});
-          completedPrayersLoadedRef.current = true;
-
-          await AsyncStorage.setItem(
-            COMPLETED_PRAYERS_STORAGE_KEY,
-            JSON.stringify({
-              date: today,
-              completed: {},
-            })
-          );
-
-          return;
-        }
-
-        const validCompletedPrayers = Object.entries(
-          parsed.completed
-        ).reduce<Record<string, boolean>>(
-          (completed, [prayerId, isCompleted]) => {
-            if (typeof isCompleted === "boolean") {
-              completed[prayerId] = isCompleted;
-            }
-
-            return completed;
-          },
-          {}
-        );
-
-        setCompletedPrayers(validCompletedPrayers);
-        completedPrayersLoadedRef.current = true;
-      } catch {
-        if (isMounted) {
-          setCompletedPrayers({});
-          completedPrayersLoadedRef.current = true;
-        }
-      }
-    };
-
-    loadCompletedPrayers().catch(() => {
-      if (isMounted) {
-        setCompletedPrayers({});
-        completedPrayersLoadedRef.current = true;
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = new Date();
-      const today = getDateKey(now);
-
-      setCurrentTime(now);
-
-      if (completedPrayersDateRef.current !== today) {
-        completedPrayersDateRef.current = today;
-        setCompletedPrayers({});
-      }
+      setCurrentTime(new Date());
     }, 1000);
 
     return () => {
       clearInterval(timer);
     };
   }, []);
-
-  useEffect(() => {
-    if (!completedPrayersLoadedRef.current) {
-      return;
-    }
-
-    const today = getDateKey(new Date());
-    completedPrayersDateRef.current = today;
-
-    const storedValue: StoredCompletedPrayers = {
-      date: today,
-      completed: completedPrayers,
-    };
-
-    AsyncStorage.setItem(
-      COMPLETED_PRAYERS_STORAGE_KEY,
-      JSON.stringify(storedValue)
-    ).catch(() => undefined);
-  }, [completedPrayers]);
 
   const greeting = getPrayerGreeting(currentTime.getHours());
 
@@ -261,13 +134,12 @@ export default function HomeTab() {
     [prayerTimes]
   );
 
-  const completedCount = useMemo(
-    () =>
-      trackablePrayers.filter(
-        (prayer) => completedPrayers[prayer.id] === true
-      ).length,
-    [completedPrayers, trackablePrayers]
-  );
+  const completedCount =
+    typeof completedPrayerCount === "number"
+      ? completedPrayerCount
+      : trackablePrayers.filter(
+          (prayer) => completedPrayers?.[prayer.id] === true
+        ).length;
 
   const progressPercentage =
     trackablePrayers.length === 0
@@ -289,13 +161,6 @@ export default function HomeTab() {
 
     return elapsedPrayers[elapsedPrayers.length - 1];
   }, [currentTime, prayerTimes]);
-
-  const togglePrayerCompletion = (prayerId: string) => {
-    setCompletedPrayers((current) => ({
-      ...current,
-      [prayerId]: !current[prayerId],
-    }));
-  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -546,13 +411,15 @@ export default function HomeTab() {
 
         <ScrollView
           horizontal
-          inverted
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.prayerCarousel}
+          contentContainerStyle={[
+            styles.prayerCarousel,
+            styles.rtlHorizontalContent,
+          ]}
         >
           {prayerTimes.map((prayer) => {
             const isCompleted =
-              completedPrayers[prayer.id] === true;
+              completedPrayers?.[prayer.id] === true;
             const isCurrent = currentPrayer?.id === prayer.id;
             const isNext = nextPrayer?.id === prayer.id;
             const isSunrise = prayer.id === "sunrise";
@@ -1178,6 +1045,10 @@ const styles = StyleSheet.create({
 
   prayerCarousel: {
     paddingBottom: 5,
+  },
+
+  rtlHorizontalContent: {
+    flexDirection: "row-reverse",
   },
 
   prayerCard: {
