@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -55,7 +56,14 @@ function getMethodArabicName(method: CalculationMethodName): string {
 }
 
 export default function PrayersTab() {
-  const { location, calculationMethod, asrMadhab } = usePrayer();
+  const {
+    location,
+    calculationMethod,
+    asrMadhab,
+    completedPrayers,
+    completedPrayerCount,
+    togglePrayerCompletion,
+  } = usePrayer();
 
   const prayerRows = useMemo(() => {
     const lat = location?.latitude ?? 21.4225;
@@ -152,6 +160,9 @@ export default function PrayersTab() {
           <Text style={styles.subtitle}>
             {cityName} · طريقة حساب {methodName}
           </Text>
+          <Text style={styles.progressText}>
+            {completedPrayerCount} / 5 مكتملة اليوم
+          </Text>
         </View>
 
         <View style={styles.locationCard}>
@@ -206,17 +217,33 @@ export default function PrayersTab() {
                 <Text style={styles.prayerTime}>{prayer.time}</Text>
 
                 {prayer.id !== "sunrise" ? (
-                  <Switch
-                    value={Boolean(notifications[prayer.id])}
-                    onValueChange={() => toggleNotification(prayer.id)}
-                    trackColor={{
-                      false: "#35445d",
-                      true: "#327e82",
-                    }}
-                    thumbColor={
-                      notifications[prayer.id] ? "#72efdd" : "#a8b4c7"
-                    }
-                  />
+                  <View style={styles.actionGroup}>
+                    {!prayer.isNightPrayer ? (
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{
+                          checked: Boolean(completedPrayers[prayer.id]),
+                        }}
+                        onPress={() => togglePrayerCompletion(prayer.id)}
+                        style={[
+                          styles.completionBox,
+                          completedPrayers[prayer.id] && styles.completedBox,
+                        ]}
+                      >
+                        <Text style={styles.completionMark}>
+                          {completedPrayers[prayer.id] ? "✓" : ""}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    <Switch
+                      value={Boolean(notifications[prayer.id])}
+                      onValueChange={() => toggleNotification(prayer.id)}
+                      trackColor={{ false: "#35445d", true: "#327e82" }}
+                      thumbColor={
+                        notifications[prayer.id] ? "#72efdd" : "#a8b4c7"
+                      }
+                    />
+                  </View>
                 ) : (
                   <View style={styles.emptySwitch} />
                 )}
@@ -259,6 +286,13 @@ const styles = StyleSheet.create({
     color: "#72efdd",
     fontSize: 13,
     marginTop: 6,
+    textAlign: "right",
+  },
+  progressText: {
+    color: "#c3cede",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 10,
     textAlign: "right",
   },
   locationCard: {
@@ -361,6 +395,30 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
     gap: 10,
   },
+  actionGroup: {
+    alignItems: "center",
+    flexDirection: "row-reverse",
+    gap: 10,
+  },
+  completionBox: {
+    alignItems: "center",
+    borderColor: "#5c6d86",
+    borderRadius: 6,
+    borderWidth: 2,
+    height: 25,
+    justifyContent: "center",
+    width: 25,
+  },
+  completedBox: {
+    backgroundColor: "#327e82",
+    borderColor: "#72efdd",
+  },
+  completionMark: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
   prayerTime: {
     color: "#c3cede",
     fontSize: 15,
@@ -391,4 +449,3 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
-
