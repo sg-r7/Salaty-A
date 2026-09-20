@@ -1,75 +1,189 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Animated,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Magnetometer } from "expo-sensors";
 import * as Location from "expo-location";
 import { Qibla, Coordinates } from "adhan";
 import { useRouter } from "expo-router";
 
+const EMA_ALPHA = 0.18;
+
 export default function QiblaScreen() {
   const router = useRouter();
+
   const [heading, setHeading] = useState(0);
   const [qiblaDirection, setQiblaDirection] = useState(0);
   const [cityName, setCityName] = useState("جاري تحديد موقعك...");
   const [loading, setLoading] = useState(true);
+  const [sensorAvailable, setSensorAvailable] = useState<boolean | null>(null);
+
+  const animatedRotation = useRef(new Animated.Value(0)).current;
+  const currentAngleRef = useRef(0);
+  const qiblaDirectionRef = useRef(0);
 
   useEffect(() => {
-    (async () => {
-      // إحداثيات احتياطية لمنطقة الكرمة / الفلوجة
+    let cancelled = false;
+    let subscription: { remove: () => void } | null = null;
+
+    const filtered = { x: 0, y: 0, initialized: false };
+
+    // 1. تهيئة الموقع وحساب زاوية القبلة
+    const initializeLocationAndQibla = async () => {
       let lat = 33.3850;
       let lng = 43.9100;
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        try {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          lat = loc.coords.latitude;
-          lng = loc.coords.longitude;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
 
-          const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-          if (geocode.length > 0) {
-            const place = geocode[0];
-            setCityName(place.district || place.city || "الأنبار");
-          } else {
-            setCityName("الموقع الفعلي (GPS)");
+        if (status === "granted") {
+          try {
+            const loc = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            lat = loc.coords.latitude;
+            lng = loc.coords.longitude;
+
+            const geocode = await Location.reverseGeocodeAsync({
+              latitude: lat,
+              longitude: lng,
+            });
+
+            if (!cancelled) {
+              if (geocode && geocode.length > 0) {
+                const place = geocode[0];
+                setCityName(place.district || place.city || "الأنبار");
+              } else {
+                setCityName("الموقع الفعلي (GPS)");
+              }
+            }
+          } catch {
+            if (!cancelled) {
+              setCityName("الكرمة / الفلوجة");
+            }
           }
-        } catch {
+        } else if (!cancelled) {
           setCityName("الكرمة / الفلوجة");
         }
-      } else {
-        setCityName("الكرمة / الفلوجة");
-      }
 
-      // حساب زاوية القبلة الدقيقة من موقعك نحو الكعبة
-      const qiblaAngle = Qibla(new Coordinates(lat, lng));
-      setQiblaDirection(Math.round(qiblaAngle));
-      setLoading(false);
-    })();
-
-    Magnetometer.setUpdateInterval(50);
-    const subscription = Magnetometer.addListener((data) => {
-      // حساب الزاوية بدقة مع مراعاة اتجاه الأجهزة
-      let angle = 0;
-      if (data) {
-        let { x, y } = data;
-        let matchAngle = Math.atan2(-x, y);
-        let degrees = matchAngle * (180 / Math.PI);
-        if (degrees < 0) {
-          degrees += 360;
+        const qiblaAngle = Math.round(Qibla(new Coordinates(lat, lng)));
+        if (!cancelled) {
+          setQiblaDirection(qiblaAngle);
+          qiblaDirectionRef.current = qiblaAngle;
         }
-        angle = degrees;
+      } catch {
+        if (!cancelled) {
+          setCityName("الكرمة / الفلوجة");
+          const fallbackAngle = Math.round(
+            Qibla(new Coordinates(33.3850, 43.9100))
+          );
+          setQiblaDirection(fallbackAngle);
+          qiblaDirectionRef.current = fallbackAngle;
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-      setHeading(Math.round(angle));
-    });
+    };
 
-    return () => subscription.remove();
-  }, []);
+    // 2. تشغيل وضبط حساس البوصلة المغناطيسي
+    const initializeCompass = async () => {
+      try {
+        const available = await Magnetometer.isAvailableAsync();
+        if (cancelled) return;
 
-  // حساب الفرق بين الشمال الجغرافي وزاوية الكعبة
+        setSensorAvailable(available);
+
+        if (!available) {
+          return;
+        }
+
+        Magnetometer.setUpdateInterval(32); // تحديث كل ~32ms (~30 إطار/ثانية)
+
+        subscription = Magnetometer.addListener((data) => {
+          if (!data) return;
+
+          const { x, y } = data;
+          const magnitude = Math.sqrt(x * x + y * y);
+
+          // تجاهل القراءات غير الصالحة أو الشاذة
+          if (!Number.isFinite(magnitude) || magnitude < 0.1) {
+            return;
+          }
+
+          // تطبيق فلتر EMA على المحاور لتنعيم الارتعاش
+          if (!filtered.initialized) {
+            filtered.x = x;
+            filtered.y = y;
+            filtered.initialized = true;
+          } else {
+            filtered.x = filtered.x + EMA_ALPHA * (x - filtered.x);
+            filtered.y = filtered.y + EMA_ALPHA * (y - filtered.y);
+          }
+
+          const matchAngle = Math.atan2(-filtered.x, filtered.y);
+          let degrees = matchAngle * (180 / Math.PI);
+          if (degrees < 0) {
+            degrees += 360;
+          }
+
+          const smoothedHeading = Math.round(degrees);
+
+          if (!cancelled) {
+            setHeading(smoothedHeading);
+          }
+
+          // حساب زاوية دوران السهم مع أقصر مسار زاوية (Shortest Angular Path)
+          const targetAngle =
+            (qiblaDirectionRef.current - smoothedHeading + 360) % 360;
+
+          let diff = (targetAngle - (currentAngleRef.current % 360)) % 360;
+          if (diff < -180) diff += 360;
+          if (diff > 180) diff -= 360;
+
+          const nextAngle = currentAngleRef.current + diff;
+          currentAngleRef.current = nextAngle;
+
+          Animated.timing(animatedRotation, {
+            toValue: nextAngle,
+            duration: 40,
+            useNativeDriver: true,
+          }).start();
+        });
+      } catch {
+        if (!cancelled) {
+          setSensorAvailable(false);
+        }
+      }
+    };
+
+    void initializeLocationAndQibla();
+    void initializeCompass();
+
+    return () => {
+      cancelled = true;
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, [animatedRotation]);
+
   const relativeAngle = (qiblaDirection - heading + 360) % 360;
-  const isAligned = Math.abs(relativeAngle) <= 5 || Math.abs(relativeAngle) >= 355;
+  const isAligned =
+    Math.abs(relativeAngle) <= 5 || Math.abs(relativeAngle) >= 355;
+
+  const rotateInterpolate = animatedRotation.interpolate({
+    inputRange: [0, 360],
+    outputRange: ["0deg", "360deg"],
+    extrapolate: "extend",
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -85,26 +199,45 @@ export default function QiblaScreen() {
       ) : (
         <View style={styles.body}>
           <Text style={styles.locationTag}>📍 {cityName}</Text>
-          <Text style={[styles.statusText, isAligned && styles.alignedText]}>
-            {isAligned ? "أنت تواجه القبلة بدقة! 🕋" : "حرّك الهاتف حتى يلتقي السهم بالأعلى"}
-          </Text>
 
-          <View style={[styles.compassCircle, isAligned && styles.alignedBorder]}>
-            <View
+          {sensorAvailable === false ? (
+            <Text style={styles.warningText}>
+              حساس البوصلة غير متوفر في جهازك، يمكنك الاستدلال بالزاوية الرقمية أدناه.
+            </Text>
+          ) : (
+            <Text style={[styles.statusText, isAligned && styles.alignedText]}>
+              {isAligned
+                ? "أنت تواجه القبلة بدقة! 🕋"
+                : "حرّك الهاتف حتى يلتقي السهم بالأعلى"}
+            </Text>
+          )}
+
+          <View
+            style={[styles.compassCircle, isAligned && styles.alignedBorder]}
+          >
+            <Animated.View
               style={[
                 styles.arrowContainer,
-                { transform: [{ rotate: `${relativeAngle}deg` }] },
+                { transform: [{ rotate: rotateInterpolate }] },
               ]}
             >
               <Text style={styles.arrowIcon}>▲</Text>
               <Text style={styles.kaabaIcon}>🕋</Text>
-            </View>
+            </Animated.View>
           </View>
 
           <View style={styles.degreesBox}>
-            <Text style={styles.degreeLabel}>زاوية القبلة: {qiblaDirection}°</Text>
-            <Text style={styles.degreeLabel}>درجة البوصلة الحالية: {heading}°</Text>
+            <Text style={styles.degreeLabel}>
+              زاوية القبلة: {qiblaDirection}°
+            </Text>
+            <Text style={styles.degreeLabel}>
+              درجة البوصلة الحالية: {heading}°
+            </Text>
           </View>
+
+          <Text style={styles.calibrationHint}>
+            إذا لاحظت عدم استقرار في التوجيه، حرّك الهاتف على شكل رقم 8 (∞) للمعايرة
+          </Text>
         </View>
       )}
     </SafeAreaView>
@@ -112,34 +245,99 @@ export default function QiblaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b132b" },
+  container: {
+    backgroundColor: "#0b132b",
+    flex: 1,
+  },
   header: {
-    flexDirection: "row",
     alignItems: "center",
+    flexDirection: "row",
     justifyContent: "space-between",
     padding: 20,
   },
-  backBtn: { padding: 8 },
-  backText: { color: "#6fffe9", fontSize: 16, fontWeight: "bold" },
-  title: { fontSize: 20, fontWeight: "bold", color: "#ffffff" },
-  body: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 40 },
-  locationTag: { color: "#48cae4", fontSize: 14, marginBottom: 8, fontWeight: "600" },
-  statusText: { fontSize: 16, color: "#a0aec0", marginBottom: 25, fontWeight: "600" },
-  alignedText: { color: "#6fffe9", fontWeight: "bold" },
+  backBtn: {
+    padding: 8,
+  },
+  backText: {
+    color: "#6fffe9",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  title: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  body: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  locationTag: {
+    color: "#48cae4",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  statusText: {
+    color: "#a0aec0",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 25,
+    textAlign: "center",
+  },
+  alignedText: {
+    color: "#6fffe9",
+    fontWeight: "bold",
+  },
+  warningText: {
+    color: "#f6c667",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 20,
+    textAlign: "center",
+  },
   compassCircle: {
-    width: 250,
-    height: 250,
+    alignItems: "center",
+    backgroundColor: "#162038",
+    borderColor: "#1c2541",
     borderRadius: 125,
     borderWidth: 4,
-    borderColor: "#1c2541",
+    height: 250,
+    justifyContent: "center",
+    width: 250,
+  },
+  alignedBorder: {
+    borderColor: "#6fffe9",
+    borderWidth: 4,
+  },
+  arrowContainer: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#162038",
   },
-  alignedBorder: { borderColor: "#6fffe9", borderWidth: 4 },
-  arrowContainer: { alignItems: "center", justifyContent: "center" },
-  arrowIcon: { fontSize: 44, color: "#6fffe9", marginBottom: 8 },
-  kaabaIcon: { fontSize: 32 },
-  degreesBox: { marginTop: 35, alignItems: "center", gap: 6 },
-  degreeLabel: { color: "#cbd5e0", fontSize: 15 },
+  arrowIcon: {
+    color: "#6fffe9",
+    fontSize: 44,
+    marginBottom: 8,
+  },
+  kaabaIcon: {
+    fontSize: 32,
+  },
+  degreesBox: {
+    alignItems: "center",
+    gap: 6,
+    marginTop: 35,
+  },
+  degreeLabel: {
+    color: "#cbd5e0",
+    fontSize: 15,
+  },
+  calibrationHint: {
+    color: "#6b7c93",
+    fontSize: 12,
+    marginTop: 20,
+    textAlign: "center",
+  },
 });
