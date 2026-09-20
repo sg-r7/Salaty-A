@@ -271,9 +271,11 @@ export default function AzkarTab() {
         {/* Categories Bar */}
         <ScrollView
           horizontal
-          inverted
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesScroll}
+          contentContainerStyle={[
+            styles.categoriesScroll,
+            styles.rtlHorizontalContent,
+          ]}
         >
           {CATEGORIES.map((cat) => {
             const isSelected = cat.id === activeCategory;
@@ -439,6 +441,9 @@ const styles = StyleSheet.create({
   categoriesScroll: {
     gap: 10,
     paddingBottom: 14,
+  },
+  rtlHorizontalContent: {
+    flexDirection: "row-reverse",
   },
   categoryChip: {
     alignItems: "center",
