@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -183,22 +183,19 @@ export default function QuranTab() {
 
   // Audio State
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [selectedReciter, setSelectedReciter] = useState<Reciter>(RECITERS[0]);
 
-  useEffect(() => {
-    loadLastRead();
-    return () => {
-      stopAndUnloadSound();
-    };
-  }, []);
+  const stopAndUnloadSound = useCallback(async () => {
+    const activeSound = soundRef.current;
+    soundRef.current = null;
 
-  const stopAndUnloadSound = async () => {
-    if (sound) {
+    if (activeSound) {
       try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+        await activeSound.stopAsync();
+        await activeSound.unloadAsync();
       } catch {
         // Ignored
       }
@@ -206,7 +203,15 @@ export default function QuranTab() {
     }
     setIsPlaying(false);
     setIsLoadingAudio(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadLastRead();
+
+    return () => {
+      void stopAndUnloadSound();
+    };
+  }, [stopAndUnloadSound]);
 
   const loadLastRead = async () => {
     try {
@@ -244,9 +249,14 @@ export default function QuranTab() {
 
     try {
       setIsLoadingAudio(true);
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+      if (soundRef.current) {
+        try {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        } catch {
+          // Ignored
+        }
+        soundRef.current = null;
         setSound(null);
       }
 
@@ -272,6 +282,7 @@ export default function QuranTab() {
         }
       );
 
+      soundRef.current = newSound;
       setSound(newSound);
       setIsPlaying(true);
     } catch (error) {
@@ -284,23 +295,24 @@ export default function QuranTab() {
   const togglePlayPause = async () => {
     if (isLoadingAudio) return;
 
-    if (!sound) {
+    const activeSound = soundRef.current;
+    if (!activeSound) {
       await playAudio();
       return;
     }
 
     if (isPlaying) {
-      await sound.pauseAsync();
+      await activeSound.pauseAsync();
       setIsPlaying(false);
     } else {
-      await sound.playAsync();
+      await activeSound.playAsync();
       setIsPlaying(true);
     }
   };
 
   const handleSelectReciter = async (reciter: Reciter) => {
     setSelectedReciter(reciter);
-    if (isPlaying || sound) {
+    if (isPlaying || soundRef.current) {
       await playAudio(reciter);
     }
   };
