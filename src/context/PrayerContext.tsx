@@ -25,7 +25,7 @@ import {
   getNotificationSettings,
   registerForNotifications,
   saveNotificationSettings,
-  schedulePrayerNotifications,
+  replaceScheduledPrayerNotifications,
 } from "../services/notificationService";
 
 export type CalculationMethodName =
@@ -51,6 +51,9 @@ export interface PrayerContextValue {
   hijriDateOffset: number;
   periodMode: boolean;
   notificationSettings: NotificationSettings;
+  completedPrayers: Record<string, boolean>;
+  completedPrayerCount: number;
+  togglePrayerCompletion: (prayerId: string) => Promise<void>;
   loading: boolean;
   error: string | null;
   nextPrayer: PrayerTimeItem | null;
@@ -80,6 +83,7 @@ interface StoredPrayerSettings {
 }
 
 const SETTINGS_STORAGE_KEY = "salaty_prayer_settings";
+const COMPLETED_PRAYERS_KEY_PREFIX = "prayer_completed_";
 
 const DEFAULT_PRAYER_SETTINGS: StoredPrayerSettings = {
   calculationMethod: "ummAlQura",
@@ -228,6 +232,13 @@ function getInitialDate(): Date {
   return new Date();
 }
 
+function getLocalDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export const PrayerContext =
   createContext<PrayerContextValue | undefined>(undefined);
 
@@ -263,6 +274,10 @@ export function PrayerProvider({
       fridayReminder: true,
     });
 
+  const [completedPrayers, setCompletedPrayers] = useState<
+    Record<string, boolean>
+  >({});
+
   const [prayerTimes, setPrayerTimes] = useState<
     PrayerTimeItem[]
   >([]);
@@ -283,16 +298,33 @@ export function PrayerProvider({
   );
 
   const loadStoredSettings = useCallback(async (): Promise<void> => {
-    const [savedLocation, savedSettings, savedNotifications] =
+    const todayKey = `${COMPLETED_PRAYERS_KEY_PREFIX}${getLocalDateKey()}`;
+    const [savedLocation, savedSettings, savedNotifications, savedCompleted] =
       await Promise.all([
         getSavedLocation(),
         AsyncStorage.getItem(SETTINGS_STORAGE_KEY),
         getNotificationSettings(),
+        AsyncStorage.getItem(todayKey),
       ]);
 
     setLocationState(savedLocation);
 
     setNotificationSettingsState(savedNotifications);
+
+    if (savedCompleted) {
+      try {
+        const parsed = JSON.parse(savedCompleted) as Record<string, unknown>;
+        setCompletedPrayers(
+          Object.fromEntries(
+            Object.entries(parsed).filter(([, value]) => value === true)
+          ) as Record<string, boolean>
+        );
+      } catch {
+        setCompletedPrayers({});
+      }
+    } else {
+      setCompletedPrayers({});
+    }
 
     if (!savedSettings) {
       return;
@@ -323,6 +355,24 @@ export function PrayerProvider({
     }
   }, []);
 
+  const togglePrayerCompletion = useCallback(
+    async (prayerId: string): Promise<void> => {
+      const key = `${COMPLETED_PRAYERS_KEY_PREFIX}${getLocalDateKey()}`;
+      const nextCompleted = {
+        ...completedPrayers,
+        [prayerId]: !completedPrayers[prayerId],
+      };
+
+      if (!nextCompleted[prayerId]) {
+        delete nextCompleted[prayerId];
+      }
+
+      setCompletedPrayers(nextCompleted);
+      await AsyncStorage.setItem(key, JSON.stringify(nextCompleted));
+    },
+    [completedPrayers]
+  );
+
   const refreshPrayerData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -349,9 +399,8 @@ export function PrayerProvider({
   const rescheduleNotifications =
     useCallback(async (): Promise<void> => {
       try {
-        await cancelAllScheduledNotifications();
-
         if (periodMode) {
+          await cancelAllScheduledNotifications();
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأن وضع الدورة مفعّل."
           );
@@ -360,6 +409,7 @@ export function PrayerProvider({
         }
 
         if (!notificationSettings.prayerNotifications) {
+          await replaceScheduledPrayerNotifications([], false);
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأنها معطّلة من الإعدادات."
           );
@@ -395,10 +445,10 @@ export function PrayerProvider({
             date: prayer.date,
           }));
 
-        const scheduledIdentifiers =
-          await schedulePrayerNotifications(upcomingPrayerItems, {
-            enabled: notificationSettings.prayerNotifications,
-          });
+        const scheduledIdentifiers = await replaceScheduledPrayerNotifications(
+          upcomingPrayerItems,
+          true
+        );
 
         console.info(
           `تمت جدولة ${scheduledIdentifiers.length} من أصل ${upcomingPrayerItems.length} إشعارات للصلاة.`,
@@ -609,6 +659,9 @@ export function PrayerProvider({
       hijriDateOffset,
       periodMode,
       notificationSettings,
+      completedPrayers,
+      completedPrayerCount: Object.keys(completedPrayers).length,
+      togglePrayerCompletion,
       loading,
       error,
       nextPrayer,
@@ -624,6 +677,7 @@ export function PrayerProvider({
     [
       asrMadhab,
       calculationMethod,
+      completedPrayers,
       error,
       hijriDateOffset,
       loading,
@@ -639,6 +693,7 @@ export function PrayerProvider({
       setHijriDateOffset,
       setLocation,
       setPeriodMode,
+      togglePrayerCompletion,
       updateNotificationSettings,
     ]
   );
