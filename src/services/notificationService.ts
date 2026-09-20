@@ -18,13 +18,15 @@ export interface PrayerScheduleItem {
   date: Date;
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+if (typeof Notifications.setNotificationHandler === "function") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export async function configurePrayerNotificationChannel(): Promise<void> {
   if (Platform.OS !== "android") {

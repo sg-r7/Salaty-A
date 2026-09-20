@@ -57,4 +57,6 @@ export async function checkForAppUpdates(silent: boolean = true): Promise<void> 
 // تصدير دوال مرادفة لضمان التوافق مع أي استدعاء داخل _layout.tsx
 export const checkForUpdates = checkForAppUpdates;
 export const checkAppVersion = checkForAppUpdates;
+// Keep the name used by RootLayout as an explicit named export.
+export const checkAppUpdate = checkForAppUpdates;
 export default checkForAppUpdates;
