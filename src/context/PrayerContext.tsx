@@ -368,7 +368,12 @@ export function PrayerProvider({
       }
 
       setCompletedPrayers(nextCompleted);
-      await AsyncStorage.setItem(key, JSON.stringify(nextCompleted));
+      try {
+        await AsyncStorage.setItem(key, JSON.stringify(nextCompleted));
+      } catch (storageError) {
+        console.error("Failed to persist prayer completion:", storageError);
+        setError("تعذر حفظ حالة الصلاة الحالية.");
+      }
     },
     [completedPrayers]
   );

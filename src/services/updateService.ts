@@ -38,7 +38,7 @@ export async function checkForAppUpdates(silent: boolean = true): Promise<void> 
             text: "تحديث الآن",
             onPress: () => {
               if (data.downloadUrl) {
-                Linking.openURL(data.downloadUrl);
+                void Linking.openURL(data.downloadUrl).catch(() => undefined);
               }
             },
           },

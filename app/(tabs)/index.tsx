@@ -211,7 +211,11 @@ export default function HomeTab() {
   };
 
   const handlePeriodModeChange = async (enabled: boolean) => {
-    await setPeriodMode(enabled);
+    try {
+      await setPeriodMode(enabled);
+    } catch (error) {
+      console.error("Period mode update failed:", error);
+    }
   };
 
   return (
@@ -447,9 +451,11 @@ export default function HomeTab() {
                       accessibilityState={{
                         checked: isCompleted,
                       }}
-                      onPress={() =>
-                        togglePrayerCompletion(prayer.id)
-                      }
+                        onPress={() => {
+                          void togglePrayerCompletion(prayer.id).catch((error) => {
+                            console.error("Prayer completion update failed:", error);
+                          });
+                        }}
                       style={[
                         styles.checkbox,
                         isCompleted && styles.checkedBox,

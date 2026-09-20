@@ -224,7 +224,11 @@ export default function PrayersTab() {
                         accessibilityState={{
                           checked: Boolean(completedPrayers[prayer.id]),
                         }}
-                        onPress={() => togglePrayerCompletion(prayer.id)}
+                        onPress={() => {
+                          void togglePrayerCompletion(prayer.id).catch((error) => {
+                            console.error("Prayer completion update failed:", error);
+                          });
+                        }}
                         style={[
                           styles.completionBox,
                           completedPrayers[prayer.id] && styles.completedBox,

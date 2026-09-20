@@ -253,17 +253,17 @@ export default function SettingsTab() {
         {
           text: "Instagram",
           onPress: () => {
-            Linking.openURL(
+            void Linking.openURL(
               "https://www.instagram.com/sg_r4?stkn=MWNjOTkxeWhhZnFkaA=="
-            );
+            ).catch(() => undefined);
           },
         },
         {
           text: "Facebook",
           onPress: () => {
-            Linking.openURL(
+            void Linking.openURL(
               "https://www.facebook.com/share/14o7eYLfMYF/"
-            );
+            ).catch(() => undefined);
           },
         },
         {

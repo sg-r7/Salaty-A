@@ -25,6 +25,7 @@ export default function QiblaScreen() {
   const [sensorAvailable, setSensorAvailable] = useState<boolean | null>(null);
 
   const animatedRotation = useRef(new Animated.Value(0)).current;
+  const rotationAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const currentAngleRef = useRef(0);
   const qiblaDirectionRef = useRef(0);
 
@@ -47,8 +48,20 @@ export default function QiblaScreen() {
             const loc = await Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.Balanced,
             });
-            lat = loc.coords.latitude;
-            lng = loc.coords.longitude;
+            const nextLat = loc.coords.latitude;
+            const nextLng = loc.coords.longitude;
+
+            if (
+              Number.isFinite(nextLat) &&
+              Number.isFinite(nextLng) &&
+              nextLat >= -90 &&
+              nextLat <= 90 &&
+              nextLng >= -180 &&
+              nextLng <= 180
+            ) {
+              lat = nextLat;
+              lng = nextLng;
+            }
 
             const geocode = await Location.reverseGeocodeAsync({
               latitude: lat,
@@ -72,7 +85,10 @@ export default function QiblaScreen() {
           setCityName("الكرمة / الفلوجة");
         }
 
-        const qiblaAngle = Math.round(Qibla(new Coordinates(lat, lng)));
+        const calculatedQiblaAngle = Qibla(new Coordinates(lat, lng));
+        const qiblaAngle = Number.isFinite(calculatedQiblaAngle)
+          ? ((Math.round(calculatedQiblaAngle) % 360) + 360) % 360
+          : 0;
         if (!cancelled) {
           setQiblaDirection(qiblaAngle);
           qiblaDirectionRef.current = qiblaAngle;
@@ -111,6 +127,10 @@ export default function QiblaScreen() {
           if (!data) return;
 
           const { x, y } = data;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return;
+          }
+
           const magnitude = Math.sqrt(x * x + y * y);
 
           // تجاهل القراءات غير الصالحة أو الشاذة
@@ -130,6 +150,10 @@ export default function QiblaScreen() {
 
           const matchAngle = Math.atan2(-filtered.x, filtered.y);
           let degrees = matchAngle * (180 / Math.PI);
+          if (!Number.isFinite(degrees)) {
+            return;
+          }
+
           if (degrees < 0) {
             degrees += 360;
           }
@@ -151,11 +175,13 @@ export default function QiblaScreen() {
           const nextAngle = currentAngleRef.current + diff;
           currentAngleRef.current = nextAngle;
 
-          Animated.timing(animatedRotation, {
+          rotationAnimationRef.current?.stop();
+          rotationAnimationRef.current = Animated.timing(animatedRotation, {
             toValue: nextAngle,
             duration: 40,
             useNativeDriver: true,
-          }).start();
+          });
+          rotationAnimationRef.current.start();
         });
       } catch {
         if (!cancelled) {
@@ -172,6 +198,8 @@ export default function QiblaScreen() {
       if (subscription) {
         subscription.remove();
       }
+      rotationAnimationRef.current?.stop();
+      rotationAnimationRef.current = null;
     };
   }, [animatedRotation]);
 

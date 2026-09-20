@@ -19,13 +19,17 @@ export interface PrayerScheduleItem {
 }
 
 if (typeof Notifications.setNotificationHandler === "function") {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (error) {
+    console.warn("Notification handler setup unavailable:", error);
+  }
 }
 
 export async function configurePrayerNotificationChannel(): Promise<void> {

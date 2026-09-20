@@ -301,12 +301,16 @@ export default function QuranTab() {
       return;
     }
 
-    if (isPlaying) {
-      await activeSound.pauseAsync();
-      setIsPlaying(false);
-    } else {
-      await activeSound.playAsync();
-      setIsPlaying(true);
+    try {
+      if (isPlaying) {
+        await activeSound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await activeSound.playAsync();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error("Audio toggle error:", error);
     }
   };
 
