@@ -1,38 +1,41 @@
 import { Alert, Linking } from "react-native";
 import Constants from "expo-constants";
 
-const VERSION_URL = "https://raw.githubusercontent.com/sg-r7/Salaty-App/main/version.json";
+export const VERSION_CHECK_URL =
+  "https://raw.githubusercontent.com/sg-r7/MIDO/main/version.json";
 
-interface RemoteVersionData {
+export interface VersionManifest {
   latestVersion: string;
   versionCode: number;
   downloadUrl: string;
   releaseNotes?: string;
 }
 
-export async function checkAppUpdate(): Promise<void> {
+export async function checkForAppUpdates(silent: boolean = true): Promise<void> {
   try {
-    const response = await fetch(`${VERSION_URL}?t=${Date.now()}`);
-    if (!response.ok) return;
+    const response = await fetch(VERSION_CHECK_URL, {
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
 
-    const data: RemoteVersionData = await response.json();
+    if (!response.ok) {
+      return;
+    }
+
+    const data: VersionManifest = await response.json();
     const currentVersionCode =
-      Constants.expoConfig?.android?.versionCode ??
-      (Constants.manifest as any)?.android?.versionCode ??
-      8;
+      Constants.expoConfig?.android?.versionCode ?? 10;
 
     if (data.versionCode > currentVersionCode) {
-      const updateMessage = data.releaseNotes
-        ? `${data.releaseNotes}\n\nالإصدار الجديد: ${data.latestVersion}`
-        : `يتوفر إصدار جديد (${data.latestVersion}) لتطبيق صلاتي.`;
-
       Alert.alert(
-        "تحديث جديد متوفر 🚀",
-        updateMessage,
+        `تحديث جديد متاح (${data.latestVersion}) 🚀`,
+        data.releaseNotes ||
+          "يتوفر إصدار جديد من تطبيق صلاتي، يرجى التحديث للحصول على أحدث الميزات والإصلاحات.",
         [
-          { text: "ذكرني لاحقاً", style: "cancel" },
+          { text: "لاحقاً", style: "cancel" },
           {
-            text: "حدّث الآن",
+            text: "تحديث الآن",
             onPress: () => {
               if (data.downloadUrl) {
                 Linking.openURL(data.downloadUrl);
@@ -41,8 +44,17 @@ export async function checkAppUpdate(): Promise<void> {
           },
         ]
       );
+    } else if (!silent) {
+      Alert.alert("أنت على أحدث إصدار", "تطبيق صلاتي محدث إلى آخر نسخة.");
     }
   } catch (error) {
-    // تجاهل الأخطاء لضمان استمرار عمل التطبيق في وضع عدم الاتصال
+    if (!silent) {
+      Alert.alert("خطأ", "تعذر التحقق من التحديثات في الوقت الحالي.");
+    }
   }
 }
+
+// تصدير دوال مرادفة لضمان التوافق مع أي استدعاء داخل _layout.tsx
+export const checkForUpdates = checkForAppUpdates;
+export const checkAppVersion = checkForAppUpdates;
+export default checkForAppUpdates;
