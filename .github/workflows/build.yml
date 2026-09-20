@@ -19,10 +19,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
+
+      - name: Typecheck Codebase
+        run: npx tsc --noEmit
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
@@ -39,5 +43,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Salaty-v1.0.6
+          name: Salaty-v1.0.10
           path: android/app/build/outputs/apk/debug/*.apk
