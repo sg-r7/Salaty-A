@@ -1,11 +1,10 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export interface PrayerNotificationItem {
-  id: string;
-  name: string;
-  date: Date;
-}
+export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v4";
+export const PRAYER_SOUND = "azan.mp3";
+const STORAGE_KEY_SETTINGS = "salaty_notification_settings";
 
 export interface NotificationSettings {
   prayerNotifications: boolean;
@@ -13,18 +12,11 @@ export interface NotificationSettings {
   fridayReminder: boolean;
 }
 
-const NOTIFICATION_SETTINGS_KEY = "salaty_notification_settings";
-const PRAYER_NOTIFICATION_SOUND = "azan.mp3";
-
-const PRAYER_CHANNEL_ID = "prayer-adhan-v3-2026";
-const ATHKAR_CHANNEL_ID = "salaty_athkar_notifications";
-const FRIDAY_CHANNEL_ID = "salaty_friday_notifications";
-
-const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  prayerNotifications: true,
-  athkarNotifications: true,
-  fridayReminder: true,
-};
+export interface PrayerScheduleItem {
+  id: string;
+  name: string;
+  date: Date;
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -34,225 +26,137 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function getNotificationSettings(): Promise<NotificationSettings> {
-  const storedValue = await import(
-    "@react-native-async-storage/async-storage"
-  ).then((module) => module.default.getItem(NOTIFICATION_SETTINGS_KEY));
-
-  if (!storedValue) {
-    return DEFAULT_NOTIFICATION_SETTINGS;
-  }
-
-  try {
-    const parsed = JSON.parse(storedValue) as Partial<NotificationSettings>;
-
-    return {
-      prayerNotifications:
-        typeof parsed.prayerNotifications === "boolean"
-          ? parsed.prayerNotifications
-          : DEFAULT_NOTIFICATION_SETTINGS.prayerNotifications,
-      athkarNotifications:
-        typeof parsed.athkarNotifications === "boolean"
-          ? parsed.athkarNotifications
-          : DEFAULT_NOTIFICATION_SETTINGS.athkarNotifications,
-      fridayReminder:
-        typeof parsed.fridayReminder === "boolean"
-          ? parsed.fridayReminder
-          : DEFAULT_NOTIFICATION_SETTINGS.fridayReminder,
-    };
-  } catch {
-    return DEFAULT_NOTIFICATION_SETTINGS;
-  }
-}
-
-export async function saveNotificationSettings(
-  settings: NotificationSettings
-): Promise<void> {
-  const AsyncStorage = (
-    await import("@react-native-async-storage/async-storage")
-  ).default;
-
-  await AsyncStorage.setItem(
-    NOTIFICATION_SETTINGS_KEY,
-    JSON.stringify(settings)
-  );
-}
-
-export async function createNotificationChannels(): Promise<void> {
+export async function configurePrayerNotificationChannel(): Promise<void> {
   if (Platform.OS !== "android") {
     return;
   }
 
   await Notifications.setNotificationChannelAsync(PRAYER_CHANNEL_ID, {
     name: "أذان ومواقيت الصلاة",
-    description: "تنبيهات مواقيت الصلاة بصوت الأذان المدمج",
     importance: Notifications.AndroidImportance.MAX,
+    sound: PRAYER_SOUND,
     vibrationPattern: [0, 500, 250, 500],
-    lightColor: "#72efdd",
-    sound: PRAYER_NOTIFICATION_SOUND,
     enableVibrate: true,
+    lightColor: "#72efdd",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
-  });
-
-  await Notifications.setNotificationChannelAsync(ATHKAR_CHANNEL_ID, {
-    name: "تنبيهات الأذكار",
-    description: "تذكيرات الأذكار اليومية",
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 150, 150],
-    lightColor: "#72efdd",
-    sound: "default",
-    enableVibrate: true,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  });
-
-  await Notifications.setNotificationChannelAsync(FRIDAY_CHANNEL_ID, {
-    name: "تذكير سورة الكهف",
-    description: "تذكير قراءة سورة الكهف يوم الجمعة",
-    importance: Notifications.AndroidImportance.DEFAULT,
-    vibrationPattern: [0, 150, 150],
-    lightColor: "#72efdd",
-    sound: "default",
-    enableVibrate: true,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.ALARM,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+    },
   });
 }
 
-export async function requestNotificationPermission(): Promise<boolean> {
-  await createNotificationChannels();
+export async function registerForNotifications(): Promise<boolean> {
+  await configurePrayerNotificationChannel();
 
-  const currentPermission = await Notifications.getPermissionsAsync();
-  let finalStatus = currentPermission.status;
+  const { status: existingStatus } =
+    await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
 
-  if (finalStatus !== "granted") {
-    const requestedPermission =
-      await Notifications.requestPermissionsAsync();
-
-    finalStatus = requestedPermission.status;
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
   }
 
   return finalStatus === "granted";
 }
 
-export async function registerForNotifications(): Promise<boolean> {
-  return requestNotificationPermission();
+const DEFAULT_SETTINGS: NotificationSettings = {
+  prayerNotifications: true,
+  athkarNotifications: true,
+  fridayReminder: true,
+};
+
+export async function getNotificationSettings(): Promise<NotificationSettings> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY_SETTINGS);
+    if (raw) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    }
+  } catch {}
+  return DEFAULT_SETTINGS;
 }
 
-export async function schedulePrayerNotification(
-  prayer: PrayerNotificationItem,
-  _sound?: string
-): Promise<string | null> {
-  if (!(prayer.date instanceof Date)) {
-    return null;
-  }
-
-  const prayerTime = prayer.date.getTime();
-
-  if (!Number.isFinite(prayerTime)) {
-    return null;
-  }
-
-  if (prayerTime <= Date.now()) {
-    return null;
-  }
-
-  await createNotificationChannels();
-
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: "حي على الصلاة.. 🕋",
-      body: `حان الآن وقت صلاة ${prayer.name}`,
-      sound: PRAYER_NOTIFICATION_SOUND,
-      priority: Notifications.AndroidNotificationPriority.MAX,
-      data: {
-        type: "prayer",
-        prayerId: prayer.id,
-        prayerName: prayer.name,
-      },
-    },
-    trigger: {
-      date: prayer.date,
-      channelId: PRAYER_CHANNEL_ID,
-    },
-  });
+export async function saveNotificationSettings(
+  settings: NotificationSettings
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+  } catch {}
 }
 
-export async function schedulePrayerNotifications(
-  prayers: PrayerNotificationItem[],
-  options?: {
-    enabled?: boolean;
-    sound?: string;
-  }
-): Promise<string[]> {
-  if (options?.enabled === false) {
-    return [];
-  }
+export async function cancelPrayerNotifications(): Promise<void> {
+  const scheduled =
+    await Notifications.getAllScheduledNotificationsAsync();
+  for (const item of scheduled) {
+    const data = item.content.data;
+    const isPrayer =
+      data?.type === "prayer" ||
+      typeof data?.prayerName === "string" ||
+      typeof data?.prayerId === "string" ||
+      item.identifier.startsWith("prayer_");
 
-  const identifiers: string[] = [];
-
-  for (const prayer of prayers) {
-    const identifier = await schedulePrayerNotification(prayer);
-
-    if (identifier) {
-      identifiers.push(identifier);
+    if (isPrayer) {
+      await Notifications.cancelScheduledNotificationAsync(item.identifier);
     }
   }
-
-  return identifiers;
-}
-
-export async function scheduleDailyAthkarNotification(
-  hour = 8,
-  minute = 0
-): Promise<string> {
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: "وردك اليومي",
-      body: "حافظ على ذكر الله، وابدأ يومك بالأذكار.",
-      sound: "default",
-      data: {
-        type: "athkar",
-      },
-    },
-    trigger: {
-      hour,
-      minute,
-      repeats: true,
-      channelId: ATHKAR_CHANNEL_ID,
-    },
-  });
-}
-
-export async function scheduleFridayKahfNotification(): Promise<string> {
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: "تذكير سورة الكهف",
-      body: "جمعة مباركة. لا تنس قراءة سورة الكهف.",
-      sound: "default",
-      data: {
-        type: "friday-kahf",
-      },
-    },
-    trigger: {
-      weekday: 6,
-      hour: 9,
-      minute: 0,
-      repeats: true,
-      channelId: FRIDAY_CHANNEL_ID,
-    },
-  });
-}
-
-export async function cancelNotification(
-  identifier: string
-): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(identifier);
 }
 
 export async function cancelAllScheduledNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
-export async function cancelAllNotifications(): Promise<void> {
-  await cancelAllScheduledNotifications();
+let schedulingQueue: Promise<unknown> = Promise.resolve();
+
+export function replaceScheduledPrayerNotifications(
+  prayers: PrayerScheduleItem[],
+  enabled: boolean
+): Promise<string[]> {
+  const task = schedulingQueue.then(async () => {
+    await cancelPrayerNotifications();
+
+    if (!enabled || prayers.length === 0) {
+      return [];
+    }
+
+    await configurePrayerNotificationChannel();
+
+    const scheduledIds: string[] = [];
+    const now = Date.now();
+
+    for (const prayer of prayers) {
+      const time = prayer.date.getTime();
+      if (!Number.isFinite(time) || time <= now) {
+        continue;
+      }
+
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "حي على الصلاة.. 🕋",
+          body: `حان الآن وقت صلاة ${prayer.name}`,
+          sound: PRAYER_SOUND,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          data: {
+            type: "prayer",
+            prayerId: prayer.id,
+            prayerName: prayer.name,
+          },
+        },
+        trigger: {
+          date: prayer.date,
+          channelId: PRAYER_CHANNEL_ID,
+        },
+      });
+
+      if (id) {
+        scheduledIds.push(id);
+      }
+    }
+
+    return scheduledIds;
+  });
+
+  schedulingQueue = task.catch(() => {});
+  return task;
 }
