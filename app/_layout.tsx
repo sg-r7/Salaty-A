@@ -3,12 +3,15 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ThemeProvider } from "../lib/theme-provider";
 import { PrayerProvider } from "../src/context/PrayerContext";
+import { configureNotificationChannels } from "../src/services/notificationService";
 import { checkAppUpdate } from "../src/services/updateService";
 
 export default function RootLayout() {
   useEffect(() => {
     const initializeApp = async (): Promise<void> => {
       try {
+        await configureNotificationChannels();
+
         if (typeof checkAppUpdate !== "function") {
           console.warn("App update check is unavailable.");
           return;

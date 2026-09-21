@@ -2,7 +2,11 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v4";
+// Android permanently caches channel settings by ID. This new ID forces the
+// OS to create a fresh prayer channel with the bundled Azan sound.
+export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v5";
+export const ATHKAR_CHANNEL_ID = "salaty-athkar-notifications-v2";
+export const FRIDAY_CHANNEL_ID = "salaty-friday-notifications-v2";
 export const PRAYER_SOUND = "azan.mp3";
 const STORAGE_KEY_SETTINGS = "salaty_notification_settings";
 
@@ -39,6 +43,7 @@ export async function configurePrayerNotificationChannel(): Promise<void> {
 
   await Notifications.setNotificationChannelAsync(PRAYER_CHANNEL_ID, {
     name: "أذان ومواقيت الصلاة",
+    description: "تنبيهات مواقيت الصلاة بصوت الأذان",
     importance: Notifications.AndroidImportance.MAX,
     sound: PRAYER_SOUND,
     vibrationPattern: [0, 500, 250, 500],
@@ -53,8 +58,38 @@ export async function configurePrayerNotificationChannel(): Promise<void> {
   });
 }
 
+export async function configureNotificationChannels(): Promise<void> {
+  if (Platform.OS !== "android") {
+    return;
+  }
+
+  await Promise.all([
+    configurePrayerNotificationChannel(),
+    Notifications.setNotificationChannelAsync(ATHKAR_CHANNEL_ID, {
+      name: "تنبيهات الأذكار",
+      description: "تذكيرات الأذكار اليومية",
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: "default",
+      vibrationPattern: [0, 150, 150],
+      enableVibrate: true,
+      lightColor: "#72efdd",
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    }),
+    Notifications.setNotificationChannelAsync(FRIDAY_CHANNEL_ID, {
+      name: "تذكير سورة الكهف",
+      description: "تذكير قراءة سورة الكهف يوم الجمعة",
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: "default",
+      vibrationPattern: [0, 150, 150],
+      enableVibrate: true,
+      lightColor: "#72efdd",
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    }),
+  ]);
+}
+
 export async function registerForNotifications(): Promise<boolean> {
-  await configurePrayerNotificationChannel();
+  await configureNotificationChannels();
 
   const { status: existingStatus } =
     await Notifications.getPermissionsAsync();
@@ -80,7 +115,10 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     if (raw) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
     }
-  } catch {}
+  } catch {
+    // Return safe defaults when storage is unavailable or malformed.
+  }
+
   return DEFAULT_SETTINGS;
 }
 
@@ -89,12 +127,15 @@ export async function saveNotificationSettings(
 ): Promise<void> {
   try {
     await AsyncStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-  } catch {}
+  } catch {
+    // Settings persistence is best-effort and must not crash the app.
+  }
 }
 
 export async function cancelPrayerNotifications(): Promise<void> {
   const scheduled =
     await Notifications.getAllScheduledNotificationsAsync();
+
   for (const item of scheduled) {
     const data = item.content.data;
     const isPrayer =
@@ -165,4 +206,44 @@ export function replaceScheduledPrayerNotifications(
 
   schedulingQueue = task.catch(() => {});
   return task;
+}
+
+export async function scheduleDailyAthkarNotification(
+  hour = 8,
+  minute = 0
+): Promise<string> {
+  await configureNotificationChannels();
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: "وردك اليومي",
+      body: "حافظ على ذكر الله، وابدأ يومك بالأذكار.",
+      sound: "default",
+      data: { type: "athkar" },
+    },
+    trigger: {
+      hour,
+      minute,
+      channelId: ATHKAR_CHANNEL_ID,
+    },
+  });
+}
+
+export async function scheduleFridayKahfNotification(): Promise<string> {
+  await configureNotificationChannels();
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: "تذكير سورة الكهف",
+      body: "جمعة مباركة. لا تنس قراءة سورة الكهف.",
+      sound: "default",
+      data: { type: "friday-kahf" },
+    },
+    trigger: {
+      weekday: 6,
+      hour: 9,
+      minute: 0,
+      channelId: FRIDAY_CHANNEL_ID,
+    },
+  });
 }

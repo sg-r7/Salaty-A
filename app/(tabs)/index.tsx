@@ -235,9 +235,9 @@ export default function HomeTab() {
         <View style={styles.header}>
           <View style={styles.headerTextContainer}>
             <Text style={styles.greeting}>{greeting}</Text>
-            <Text style={styles.title}>السلام عليكم</Text>
+            <Text style={styles.title}>صدقة جارية</Text>
             <Text style={styles.subtitle}>
-              أهلاً بك في تطبيق صلاتي
+              عن روح والدي، نسألكم له الدعاء
             </Text>
           </View>
 
