@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Android permanently caches channel settings by ID. This new ID forces the
 // OS to create a fresh prayer channel with the bundled Azan sound.
-export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v5";
+export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v6";
 export const ATHKAR_CHANNEL_ID = "salaty-athkar-notifications-v2";
 export const FRIDAY_CHANNEL_ID = "salaty-friday-notifications-v2";
 export const PRAYER_SOUND = "azan.mp3";
@@ -51,10 +51,6 @@ export async function configurePrayerNotificationChannel(): Promise<void> {
     lightColor: "#72efdd",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
-    audioAttributes: {
-      usage: Notifications.AndroidAudioUsage.ALARM,
-      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
-    },
   });
 }
 
@@ -249,3 +245,4 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
     },
   });
 }
+
