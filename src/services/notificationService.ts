@@ -224,6 +224,7 @@ export async function scheduleDailyAthkarNotification(
     trigger: {
       hour,
       minute,
+      repeats: true,
       channelId: ATHKAR_CHANNEL_ID,
     },
   });
@@ -243,6 +244,7 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
       weekday: 6,
       hour: 9,
       minute: 0,
+      repeats: true,
       channelId: FRIDAY_CHANNEL_ID,
     },
   });
