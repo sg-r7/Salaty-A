@@ -180,7 +180,6 @@ export function replaceScheduledPrayerNotifications(
           body: `حان الآن وقت صلاة ${prayer.name}`,
           sound: PRAYER_SOUND,
           priority: Notifications.AndroidNotificationPriority.MAX,
-          channelId: PRAYER_CHANNEL_ID,
           data: {
             type: "prayer",
             prayerId: prayer.id,
@@ -189,6 +188,7 @@ export function replaceScheduledPrayerNotifications(
         },
         trigger: {
           date: prayer.date,
+          channelId: PRAYER_CHANNEL_ID,
         },
       });
 
@@ -215,13 +215,13 @@ export async function scheduleDailyAthkarNotification(
       title: "وردك اليومي",
       body: "حافظ على ذكر الله، وابدأ يومك بالأذكار.",
       sound: "default",
-      channelId: ATHKAR_CHANNEL_ID,
       data: { type: "athkar" },
     },
     trigger: {
       hour,
       minute,
       repeats: true,
+      channelId: ATHKAR_CHANNEL_ID,
     },
   });
 }
@@ -234,7 +234,6 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
       title: "تذكير سورة الكهف",
       body: "جمعة مباركة. لا تنس قراءة سورة الكهف.",
       sound: "default",
-      channelId: FRIDAY_CHANNEL_ID,
       data: { type: "friday-kahf" },
     },
     trigger: {
@@ -242,6 +241,7 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
       hour: 9,
       minute: 0,
       repeats: true,
+      channelId: FRIDAY_CHANNEL_ID,
     },
   });
 }
