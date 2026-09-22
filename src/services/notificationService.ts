@@ -7,7 +7,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export const PRAYER_CHANNEL_ID = "salaty-prayer-adhan-v7";
 export const ATHKAR_CHANNEL_ID = "salaty-athkar-notifications-v2";
 export const FRIDAY_CHANNEL_ID = "salaty-friday-notifications-v2";
-export const PRAYER_SOUND = "azan.mp3";
+// Android resolves notification sounds from res/raw by resource name, without
+// the file extension. iOS continues to use the bundled filename.
+export const PRAYER_SOUND = Platform.OS === "android" ? "azan" : "azan.mp3";
+const LEGACY_PRAYER_CHANNEL_IDS = new Set([
+  "salaty-prayer-adhan-v6",
+  "salaty-prayer-adhan-v5",
+  "prayer_makkah",
+  "prayer_notifications",
+  "prayer-adhan-v3-2026",
+]);
 const STORAGE_KEY_SETTINGS = "salaty_notification_settings";
 
 export interface NotificationSettings {
@@ -51,6 +60,10 @@ export async function configurePrayerNotificationChannel(): Promise<void> {
     lightColor: "#72efdd",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.ALARM,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+    },
   });
 }
 
@@ -138,7 +151,13 @@ export async function cancelPrayerNotifications(): Promise<void> {
       data?.type === "prayer" ||
       typeof data?.prayerName === "string" ||
       typeof data?.prayerId === "string" ||
-      item.identifier.startsWith("prayer_");
+      item.identifier.startsWith("prayer_") ||
+      LEGACY_PRAYER_CHANNEL_IDS.has(
+        typeof item.trigger === "object" && item.trigger !== null &&
+          "channelId" in item.trigger
+          ? String(item.trigger.channelId)
+          : ""
+      );
 
     if (isPrayer) {
       await Notifications.cancelScheduledNotificationAsync(item.identifier);
