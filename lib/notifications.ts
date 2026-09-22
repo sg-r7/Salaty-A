@@ -4,19 +4,13 @@ import { Platform } from "react-native";
 export const PRAYER_NOTIFICATION_CHANNEL_ID = "prayer_notifications";
 export const PRAYER_NOTIFICATION_SOUND = "azan.mp3";
 
-if (typeof Notifications.setNotificationHandler === "function") {
-  try {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
-  } catch (error) {
-    console.warn("Notification handler setup unavailable:", error);
-  }
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export async function configurePrayerNotificationChannel(): Promise<void> {
   if (Platform.OS !== "android") {
