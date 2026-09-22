@@ -206,6 +206,7 @@ export async function schedulePrayerNotification(
       },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: prayer.date,
       channelId: PRAYER_CHANNEL_ID,
     },
@@ -251,9 +252,9 @@ export async function scheduleDailyAthkarNotification(
       },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
       minute,
-      repeats: true,
       channelId: ATHKAR_CHANNEL_ID,
     },
   });
@@ -270,10 +271,10 @@ export async function scheduleFridayKahfNotification(): Promise<string> {
       },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
       weekday: 6,
       hour: 9,
       minute: 0,
-      repeats: true,
       channelId: FRIDAY_CHANNEL_ID,
     },
   });
