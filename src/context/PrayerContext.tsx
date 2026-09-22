@@ -682,4 +682,3 @@ export function getAdjustedGregorianDate(
   adjustedDate.setDate(adjustedDate.getDate() + offset);
   return adjustedDate;
 }
-
