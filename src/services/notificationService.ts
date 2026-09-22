@@ -292,4 +292,3 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
 export async function cancelAllNotifications(): Promise<void> {
   await cancelAllScheduledNotifications();
 }
-
