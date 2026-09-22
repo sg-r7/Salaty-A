@@ -20,12 +20,13 @@ import {
   getSavedLocation,
 } from "../services/locationService";
 import {
+  AdhanSound,
   NotificationSettings,
   cancelAllScheduledNotifications,
   getNotificationSettings,
   registerForNotifications,
   saveNotificationSettings,
-  replaceScheduledPrayerNotifications,
+  schedulePrayerNotifications,
 } from "../services/notificationService";
 
 export type CalculationMethodName =
@@ -51,9 +52,6 @@ export interface PrayerContextValue {
   hijriDateOffset: number;
   periodMode: boolean;
   notificationSettings: NotificationSettings;
-  completedPrayers: Record<string, boolean>;
-  completedPrayerCount: number;
-  togglePrayerCompletion: (prayerId: string) => Promise<void>;
   loading: boolean;
   error: string | null;
   nextPrayer: PrayerTimeItem | null;
@@ -83,7 +81,6 @@ interface StoredPrayerSettings {
 }
 
 const SETTINGS_STORAGE_KEY = "salaty_prayer_settings";
-const COMPLETED_PRAYERS_KEY_PREFIX = "prayer_completed_";
 
 const DEFAULT_PRAYER_SETTINGS: StoredPrayerSettings = {
   calculationMethod: "ummAlQura",
@@ -232,13 +229,6 @@ function getInitialDate(): Date {
   return new Date();
 }
 
-function getLocalDateKey(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export const PrayerContext =
   createContext<PrayerContextValue | undefined>(undefined);
 
@@ -272,11 +262,8 @@ export function PrayerProvider({
       prayerNotifications: true,
       athkarNotifications: true,
       fridayReminder: true,
+      adhanSound: "makkah",
     });
-
-  const [completedPrayers, setCompletedPrayers] = useState<
-    Record<string, boolean>
-  >({});
 
   const [prayerTimes, setPrayerTimes] = useState<
     PrayerTimeItem[]
@@ -298,33 +285,24 @@ export function PrayerProvider({
   );
 
   const loadStoredSettings = useCallback(async (): Promise<void> => {
-    const todayKey = `${COMPLETED_PRAYERS_KEY_PREFIX}${getLocalDateKey()}`;
-    const [savedLocation, savedSettings, savedNotifications, savedCompleted] =
+    const [savedLocation, savedSettings, savedNotifications] =
       await Promise.all([
         getSavedLocation(),
         AsyncStorage.getItem(SETTINGS_STORAGE_KEY),
         getNotificationSettings(),
-        AsyncStorage.getItem(todayKey),
       ]);
 
     setLocationState(savedLocation);
 
-    setNotificationSettingsState(savedNotifications);
-
-    if (savedCompleted) {
-      try {
-        const parsed = JSON.parse(savedCompleted) as Record<string, unknown>;
-        setCompletedPrayers(
-          Object.fromEntries(
-            Object.entries(parsed).filter(([, value]) => value === true)
-          ) as Record<string, boolean>
-        );
-      } catch {
-        setCompletedPrayers({});
-      }
-    } else {
-      setCompletedPrayers({});
-    }
+    // تصفية أي إعداد صوت قديم مخزن كـ default وتوجيهه للأذان
+    const normalizedNotifications: NotificationSettings = {
+      ...savedNotifications,
+      adhanSound:
+        savedNotifications.adhanSound === "default"
+          ? "makkah"
+          : savedNotifications.adhanSound,
+    };
+    setNotificationSettingsState(normalizedNotifications);
 
     if (!savedSettings) {
       return;
@@ -355,29 +333,6 @@ export function PrayerProvider({
     }
   }, []);
 
-  const togglePrayerCompletion = useCallback(
-    async (prayerId: string): Promise<void> => {
-      const key = `${COMPLETED_PRAYERS_KEY_PREFIX}${getLocalDateKey()}`;
-      const nextCompleted = {
-        ...completedPrayers,
-        [prayerId]: !completedPrayers[prayerId],
-      };
-
-      if (!nextCompleted[prayerId]) {
-        delete nextCompleted[prayerId];
-      }
-
-      setCompletedPrayers(nextCompleted);
-      try {
-        await AsyncStorage.setItem(key, JSON.stringify(nextCompleted));
-      } catch (storageError) {
-        console.error("Failed to persist prayer completion:", storageError);
-        setError("تعذر حفظ حالة الصلاة الحالية.");
-      }
-    },
-    [completedPrayers]
-  );
-
   const refreshPrayerData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -404,21 +359,19 @@ export function PrayerProvider({
   const rescheduleNotifications =
     useCallback(async (): Promise<void> => {
       try {
+        await cancelAllScheduledNotifications();
+
         if (periodMode) {
-          await cancelAllScheduledNotifications();
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأن وضع الدورة مفعّل."
           );
-
           return;
         }
 
         if (!notificationSettings.prayerNotifications) {
-          await replaceScheduledPrayerNotifications([], false);
           console.info(
             "تم تجاوز جدولة إشعارات الصلاة لأنها معطّلة من الإعدادات."
           );
-
           return;
         }
 
@@ -430,7 +383,6 @@ export function PrayerProvider({
 
           console.error(permissionError);
           setError(permissionError);
-
           return;
         }
 
@@ -450,15 +402,22 @@ export function PrayerProvider({
             date: prayer.date,
           }));
 
-        const scheduledIdentifiers = await replaceScheduledPrayerNotifications(
-          upcomingPrayerItems,
-          true
-        );
+        const activeAdhanSound =
+          notificationSettings.adhanSound === "default"
+            ? "makkah"
+            : notificationSettings.adhanSound;
+
+        const scheduledIdentifiers =
+          await schedulePrayerNotifications(upcomingPrayerItems, {
+            enabled: notificationSettings.prayerNotifications,
+            sound: activeAdhanSound,
+          });
 
         console.info(
           `تمت جدولة ${scheduledIdentifiers.length} من أصل ${upcomingPrayerItems.length} إشعارات للصلاة.`,
           {
             identifiers: scheduledIdentifiers,
+            sound: activeAdhanSound,
             prayers: upcomingPrayerItems.map((prayer) => ({
               id: prayer.id,
               name: prayer.name,
@@ -476,7 +435,6 @@ export function PrayerProvider({
 
           console.error(schedulingError);
           setError(schedulingError);
-
           return;
         }
 
@@ -491,13 +449,13 @@ export function PrayerProvider({
           scheduleErr instanceof Error
             ? scheduleErr.message
             : String(scheduleErr);
-
         const schedulingError = `فشل جدولة إشعارات الصلاة: ${errorMessage}`;
 
         console.error(schedulingError, scheduleErr);
         setError(schedulingError);
       }
     }, [
+      notificationSettings.adhanSound,
       notificationSettings.prayerNotifications,
       periodMode,
       prayerTimes,
@@ -523,7 +481,6 @@ export function PrayerProvider({
     rescheduleNotifications().catch((err) => {
       const errorMessage =
         err instanceof Error ? err.message : String(err);
-
       const schedulingError = `فشل تشغيل جدولة الإشعارات التلقائية: ${errorMessage}`;
 
       console.error(schedulingError, err);
@@ -664,9 +621,6 @@ export function PrayerProvider({
       hijriDateOffset,
       periodMode,
       notificationSettings,
-      completedPrayers,
-      completedPrayerCount: Object.keys(completedPrayers).length,
-      togglePrayerCompletion,
       loading,
       error,
       nextPrayer,
@@ -682,7 +636,6 @@ export function PrayerProvider({
     [
       asrMadhab,
       calculationMethod,
-      completedPrayers,
       error,
       hijriDateOffset,
       loading,
@@ -698,7 +651,6 @@ export function PrayerProvider({
       setHijriDateOffset,
       setLocation,
       setPeriodMode,
-      togglePrayerCompletion,
       updateNotificationSettings,
     ]
   );
@@ -728,6 +680,6 @@ export function getAdjustedGregorianDate(
 ): Date {
   const adjustedDate = new Date(date);
   adjustedDate.setDate(adjustedDate.getDate() + offset);
-
   return adjustedDate;
 }
+
