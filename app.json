@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "صلاتي | SALATY",
-    "slug": "salaty-app",
+    "name": "صلاتي",
+    "slug": "salaty-a",
     "owner": "sgr7s-team",
     "version": "1.0.14",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
       "backgroundColor": "#071739"
     },
     "android": {
-      "package": "com.salaty.app",
+      "package": "com.salaty.a",
       "versionCode": 14,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -46,7 +46,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "628ec61b-3eed-4b17-a65f-aab75d5edbbc"
+        "projectId": ""
       }
     }
   }
